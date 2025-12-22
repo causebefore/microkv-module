@@ -4,38 +4,38 @@
  * @author liu
  * @date 2025-12-20
  * @version 2.0
- * 
+ *
  * @details 本文件实现了 MicroKV 的核心功能：
- * 
+ *
  * ## 核心算法
- * 
+ *
  * ### 写入策略
  * - 追加写入：新数据直接追加到活跃扇区末尾
  * - 更新键：不删除旧值，直接追加新值（读取时优先返回最新值）
  * - 删除键：写入一个 val_len=0 的标记条目
- * 
+ *
  * ### 垃圾回收 (GC)
  * 1. **全量GC** (MKV_Compact)
  *    - 触发：活跃扇区空间不足时
  *    - 过程：迁移所有有效条目到新扇区
  *    - 优化：使用位图 + 精确验证避免哈希冲突
- * 
+ *
  * 2. **增量GC** (MKV_INCREMENTAL_GC)
  *    - 触发：活跃扇区使用率 > MKV_GC_THRESHOLD_PERCENT
  *    - 过程：每次写入后迁移 N 个条目
  *    - 优势：分摊延迟，避免长时间阻塞
- * 
+ *
  * ### 缓存策略 (MKV_CACHE_ENABLE)
  * - 算法：LFU (Least Frequently Used)
  * - 命中：直接返回缓存数据，增加访问计数
  * - 未命中：从 Flash 读取并更新缓存
  * - 替换：选择访问次数最少的条目
- * 
+ *
  * ### 默认值机制
  * - 存储：静态常量表，不占用 Flash
  * - 查找：先查 Flash，未找到再查默认值表
  * - 重置：支持单个键或所有键重置
- * 
+ *
  * @note 移植方法：
  *       1. 修改 MicroKV_cfg.h 配置 Flash 地址和大小
  *       2. 修改 MicroKV_port.c 实现 Flash 操作函数
@@ -51,7 +51,7 @@ static MKV_Instance_t g_mkv = {0};
 
 /* ==================== 辅助宏 ==================== */
 #define MKV_SECTOR_ADDR(idx) (g_mkv.flash_ops.flash_base + (idx) * g_mkv.flash_ops.sector_size)
-#define MKV_ALIGN(x) (((x) + (g_mkv.flash_ops.align_size - 1)) & ~(g_mkv.flash_ops.align_size - 1))
+#define MKV_ALIGN(x)         (((x) + (g_mkv.flash_ops.align_size - 1)) & ~(g_mkv.flash_ops.align_size - 1))
 
 /* ==================== CRC16 ==================== */
 /**
@@ -89,21 +89,19 @@ static MKV_CacheEntry_t *MKV_CacheFind(const char *key)
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
     {
-        MKV_CacheEntry_t *entry = &g_mkv.cache.entries[i];  // 获取缓存条目
+        MKV_CacheEntry_t *entry = &g_mkv.cache.entries[i]; // 获取缓存条目
 
-        if (entry->valid &&  
-            entry->key_len == key_len &&
-            memcmp(entry->key, key, key_len) == 0)  // 比较键名
+        if (entry->valid && entry->key_len == key_len && memcmp(entry->key, key, key_len) == 0) // 比较键名
         {
             // 命中，更新访问计数
-            entry->access_count++;  // 增加访问次数
+            entry->access_count++;   // 增加访问次数
             g_mkv.cache.hit_count++; // 增加命中计数
             return entry;
         }
     }
     // 未命中
-    g_mkv.cache.miss_count++; // 增加未命中计数 
-    return NULL; 
+    g_mkv.cache.miss_count++; // 增加未命中计数
+    return NULL;
 }
 /**
  * @brief 查找LFU缓存条目索引
@@ -112,7 +110,7 @@ static MKV_CacheEntry_t *MKV_CacheFind(const char *key)
  */
 static uint8_t MKV_CacheFindLFU(void)
 {
-    uint8_t lfu_idx = 0;
+    uint8_t  lfu_idx   = 0;
     uint32_t min_count = 0xFFFFFFFF;
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
@@ -125,7 +123,7 @@ static uint8_t MKV_CacheFindLFU(void)
         if (g_mkv.cache.entries[i].access_count < min_count)
         {
             min_count = g_mkv.cache.entries[i].access_count;
-            lfu_idx = i;
+            lfu_idx   = i;
         }
     }
 
@@ -140,13 +138,12 @@ static uint8_t MKV_CacheFindLFU(void)
  */
 static void MKV_CacheUpdate(const char *key, const void *value, uint8_t val_len)
 {
-    MKV_CacheEntry_t *entry = NULL;
-    uint8_t key_len = strlen(key);
+    MKV_CacheEntry_t *entry   = NULL;
+    uint8_t           key_len = strlen(key);
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
     {
-        if (g_mkv.cache.entries[i].valid &&
-            g_mkv.cache.entries[i].key_len == key_len &&
+        if (g_mkv.cache.entries[i].valid && g_mkv.cache.entries[i].key_len == key_len &&
             memcmp(g_mkv.cache.entries[i].key, key, key_len) == 0)
         {
             entry = &g_mkv.cache.entries[i];
@@ -156,8 +153,8 @@ static void MKV_CacheUpdate(const char *key, const void *value, uint8_t val_len)
 
     if (!entry)
     {
-        uint8_t idx = MKV_CacheFindLFU();
-        entry = &g_mkv.cache.entries[idx];
+        uint8_t idx    = MKV_CacheFindLFU();
+        entry          = &g_mkv.cache.entries[idx];
         entry->key_len = key_len;
         memcpy(entry->key, key, key_len);
         entry->access_count = 1;
@@ -178,8 +175,7 @@ static void MKV_CacheRemove(const char *key)
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
     {
-        if (g_mkv.cache.entries[i].valid &&
-            g_mkv.cache.entries[i].key_len == key_len &&
+        if (g_mkv.cache.entries[i].valid && g_mkv.cache.entries[i].key_len == key_len &&
             memcmp(g_mkv.cache.entries[i].key, key, key_len) == 0)
         {
             g_mkv.cache.entries[i].valid = 0;
@@ -206,7 +202,7 @@ static uint8_t MKV_HashKey(const char *key, uint8_t len)
     {
         hash = hash * 31 + key[i];
     }
-    return (uint8_t)(hash & 0xFF);
+    return (uint8_t) (hash & 0xFF);
 }
 
 /**
@@ -240,7 +236,7 @@ static inline uint8_t MKV_BitmapTest(const uint8_t *bitmap, uint8_t idx)
  */
 static int MKV_ReadSectorHeader(uint8_t idx, MKV_SectorHeader_t *hdr)
 {
-    return g_mkv.flash_ops.read_func(MKV_SECTOR_ADDR(idx), (uint8_t *)hdr, sizeof(MKV_SectorHeader_t));
+    return g_mkv.flash_ops.read_func(MKV_SECTOR_ADDR(idx), (uint8_t *) hdr, sizeof(MKV_SectorHeader_t));
 }
 
 /**
@@ -273,7 +269,7 @@ static uint32_t MKV_ScanWriteOffset(uint8_t idx)
     while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *)&entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -300,15 +296,15 @@ static uint32_t MKV_ScanWriteOffset(uint8_t idx)
  */
 static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *out_entry)
 {
-    uint32_t sector = MKV_SECTOR_ADDR(idx);
+    uint32_t sector     = MKV_SECTOR_ADDR(idx);
     uint32_t found_addr = 0;
-    uint32_t offset = MKV_SECTOR_HEADER_SIZE;
-    uint8_t key_len = strlen(key);
+    uint32_t offset     = MKV_SECTOR_HEADER_SIZE;
+    uint8_t  key_len    = strlen(key);
 
     while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *)&entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -323,7 +319,7 @@ static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *o
         if (entry.state == MKV_STATE_VALID && entry.key_len == key_len)
         {
             char temp_key[MKV_MAX_KEY_LEN];
-            g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *)temp_key, key_len);
+            g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) temp_key, key_len);
 
             if (memcmp(temp_key, key, key_len) == 0)
             {
@@ -352,9 +348,11 @@ static uint32_t MKV_FindKey(const char *key, MKV_Entry_t *out_entry)
 {
     for (uint8_t i = 0; i < g_mkv.flash_ops.sector_count; i++)
     {
-        int8_t idx = (int8_t)g_mkv.active_sector - i;
+        int8_t idx = (int8_t) g_mkv.active_sector - i;
         if (idx < 0)
+        {
             idx += g_mkv.flash_ops.sector_count;
+        }
 
         if (!MKV_IsSectorValid(idx))
         {
@@ -378,7 +376,7 @@ static uint32_t MKV_FindKey(const char *key, MKV_Entry_t *out_entry)
  */
 static MKV_Error_t MKV_SwitchToNextSector(void)
 {
-    uint8_t next_idx = (g_mkv.active_sector + 1) % g_mkv.flash_ops.sector_count;
+    uint8_t  next_idx  = (g_mkv.active_sector + 1) % g_mkv.flash_ops.sector_count;
     uint32_t next_addr = MKV_SECTOR_ADDR(next_idx);
 
     if (g_mkv.flash_ops.erase_func(next_addr) != 0)
@@ -386,17 +384,15 @@ static MKV_Error_t MKV_SwitchToNextSector(void)
         return MKV_ERR_FLASH;
     }
 
-    MKV_SectorHeader_t hdr = {
-        .magic = MKV_MAGIC,
-        .seq = g_mkv.sector_seq + 1};
-    if (g_mkv.flash_ops.write_func(next_addr, (uint8_t *)&hdr, sizeof(hdr)) != 0)
+    MKV_SectorHeader_t hdr = {.magic = MKV_MAGIC, .seq = g_mkv.sector_seq + 1};
+    if (g_mkv.flash_ops.write_func(next_addr, (uint8_t *) &hdr, sizeof(hdr)) != 0)
     {
         return MKV_ERR_FLASH;
     }
 
     g_mkv.active_sector = next_idx;
-    g_mkv.sector_seq = hdr.seq;
-    g_mkv.write_offset = MKV_SECTOR_HEADER_SIZE;
+    g_mkv.sector_seq    = hdr.seq;
+    g_mkv.write_offset  = MKV_SECTOR_HEADER_SIZE;
 
     return MKV_OK;
 }
@@ -419,12 +415,16 @@ static MKV_Error_t MKV_Compact(void)
 
     for (uint8_t s = 1; s < g_mkv.flash_ops.sector_count; s++)
     {
-        int8_t idx = (int8_t)g_mkv.active_sector - s;
+        int8_t idx = (int8_t) g_mkv.active_sector - s;
         if (idx < 0)
+        {
             idx += g_mkv.flash_ops.sector_count;
+        }
 
         if (!MKV_IsSectorValid(idx))
+        {
             continue;
+        }
 
         uint32_t sector = MKV_SECTOR_ADDR(idx);
         uint32_t offset = MKV_SECTOR_HEADER_SIZE;
@@ -432,7 +432,7 @@ static MKV_Error_t MKV_Compact(void)
         while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
         {
             MKV_Entry_t entry;
-            if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *)&entry, MKV_ENTRY_HEADER_SIZE) != 0)
+            if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
             {
                 break;
             }
@@ -446,9 +446,9 @@ static MKV_Error_t MKV_Compact(void)
             if (entry.state == MKV_STATE_VALID && entry.val_len > 0)
             {
                 char key[MKV_MAX_KEY_LEN] = {0};
-                g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *)key, entry.key_len);
+                g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) key, entry.key_len);
 
-                uint8_t hash = MKV_HashKey(key, entry.key_len);
+                uint8_t hash      = MKV_HashKey(key, entry.key_len);
                 uint8_t need_copy = 0;
 
                 if (!MKV_BitmapTest(copied_bitmap, hash))
@@ -475,7 +475,9 @@ static MKV_Error_t MKV_Compact(void)
                     {
                         err = MKV_SwitchToNextSector();
                         if (err != MKV_OK)
+                        {
                             return err;
+                        }
                         // 切换扇区后清空位图（新扇区为空）
                         memset(copied_bitmap, 0, sizeof(copied_bitmap));
                     }
@@ -512,11 +514,13 @@ static MKV_Error_t MKV_Compact(void)
 static uint8_t MKV_ShouldStartGC(void)
 {
     if (g_mkv.gc_active)
+    {
         return 0; // 已经在进行中
+    }
 
     // 计算使用率
-    uint32_t used = g_mkv.write_offset;
-    uint32_t total = g_mkv.flash_ops.sector_size;
+    uint32_t used    = g_mkv.write_offset;
+    uint32_t total   = g_mkv.flash_ops.sector_size;
     uint32_t percent = (used * 100) / total;
 
     return (percent >= MKV_GC_THRESHOLD_PERCENT);
@@ -529,18 +533,20 @@ static uint8_t MKV_ShouldStartGC(void)
 static void MKV_StartIncrementalGC(void)
 {
     // 找到最旧的有效扇区作为GC源
-    uint8_t oldest_idx = 0;
+    uint8_t  oldest_idx = 0;
     uint16_t oldest_seq = 0xFFFF;
 
     for (uint8_t i = 0; i < g_mkv.flash_ops.sector_count; i++)
     {
         if (i == g_mkv.active_sector)
+        {
             continue;
+        }
 
         MKV_SectorHeader_t hdr;
         if (MKV_ReadSectorHeader(i, &hdr) == 0 && hdr.magic == MKV_MAGIC)
         {
-            if ((int16_t)(oldest_seq - hdr.seq) > 0)
+            if ((int16_t) (oldest_seq - hdr.seq) > 0)
             {
                 oldest_seq = hdr.seq;
                 oldest_idx = i;
@@ -549,11 +555,13 @@ static void MKV_StartIncrementalGC(void)
     }
 
     if (oldest_seq == 0xFFFF)
+    {
         return; // 没有旧扇区
+    }
 
     g_mkv.gc_src_sector = oldest_idx;
     g_mkv.gc_src_offset = MKV_SECTOR_HEADER_SIZE;
-    g_mkv.gc_active = 1;
+    g_mkv.gc_active     = 1;
     memset(g_mkv.gc_bitmap, 0, sizeof(g_mkv.gc_bitmap));
 
     log_i("Incremental GC started, src sector=%u", oldest_idx);
@@ -567,7 +575,9 @@ static void MKV_StartIncrementalGC(void)
 static uint8_t MKV_IncrementalGCStep(void)
 {
     if (!g_mkv.gc_active)
+    {
         return 0;
+    }
 
     uint32_t sector = MKV_SECTOR_ADDR(g_mkv.gc_src_sector);
 
@@ -575,8 +585,7 @@ static uint8_t MKV_IncrementalGCStep(void)
     while (g_mkv.gc_src_offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset,
-                                      (uint8_t *)&entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -587,8 +596,7 @@ static uint8_t MKV_IncrementalGCStep(void)
             break;
         }
 
-        uint32_t entry_size = MKV_ALIGN(MKV_ENTRY_HEADER_SIZE + entry.key_len +
-                                        entry.val_len + MKV_ENTRY_CRC_SIZE);
+        uint32_t entry_size = MKV_ALIGN(MKV_ENTRY_HEADER_SIZE + entry.key_len + entry.val_len + MKV_ENTRY_CRC_SIZE);
 
         // 跳过无效/已删除的条目
         if (entry.state != MKV_STATE_VALID || entry.val_len == 0)
@@ -599,8 +607,7 @@ static uint8_t MKV_IncrementalGCStep(void)
 
         // 读取键名
         char key[MKV_MAX_KEY_LEN] = {0};
-        g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset + MKV_ENTRY_HEADER_SIZE,
-                                  (uint8_t *)key, entry.key_len);
+        g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) key, entry.key_len);
 
         uint8_t hash = MKV_HashKey(key, entry.key_len);
 
@@ -609,7 +616,7 @@ static uint8_t MKV_IncrementalGCStep(void)
         {
             // 检查这个key是否在活跃扇区已有更新的版本
             MKV_Entry_t new_entry;
-            uint32_t new_addr = MKV_FindKeyInSector(g_mkv.active_sector, key, &new_entry);
+            uint32_t    new_addr = MKV_FindKeyInSector(g_mkv.active_sector, key, &new_entry);
 
             if (new_addr == 0)
             {
@@ -618,12 +625,10 @@ static uint8_t MKV_IncrementalGCStep(void)
                 if (g_mkv.write_offset + entry_size <= g_mkv.flash_ops.sector_size)
                 {
                     // 复制条目
-                    uint8_t buf[MKV_ENTRY_HEADER_SIZE + MKV_MAX_KEY_LEN +
-                                MKV_MAX_VALUE_LEN + MKV_ENTRY_CRC_SIZE];
+                    uint8_t buf[MKV_ENTRY_HEADER_SIZE + MKV_MAX_KEY_LEN + MKV_MAX_VALUE_LEN + MKV_ENTRY_CRC_SIZE];
                     g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset, buf, entry_size);
 
-                    uint32_t new_write_addr = MKV_SECTOR_ADDR(g_mkv.active_sector) +
-                                              g_mkv.write_offset;
+                    uint32_t new_write_addr = MKV_SECTOR_ADDR(g_mkv.active_sector) + g_mkv.write_offset;
                     if (g_mkv.flash_ops.write_func(new_write_addr, buf, entry_size) == 0)
                     {
                         g_mkv.write_offset += entry_size;
@@ -665,7 +670,9 @@ static void MKV_DoIncrementalGC(void)
         for (uint8_t i = 0; i < MKV_GC_ENTRIES_PER_WRITE; i++)
         {
             if (!MKV_IncrementalGCStep())
+            {
                 break;
+            }
         }
     }
 }
@@ -708,9 +715,9 @@ MKV_Error_t mkv_scan(void)
         return MKV_OK;
     }
 
-    uint8_t found = 0;
-    uint16_t max_seq = 0;
-    uint8_t active_idx = 0;
+    uint8_t  found      = 0;
+    uint16_t max_seq    = 0;
+    uint8_t  active_idx = 0;
 
     for (uint8_t i = 0; i < g_mkv.flash_ops.sector_count; i++)
     {
@@ -722,11 +729,11 @@ MKV_Error_t mkv_scan(void)
 
         if (hdr.magic == MKV_MAGIC)
         {
-            if (!found || (int16_t)(hdr.seq - max_seq) > 0)
+            if (!found || (int16_t) (hdr.seq - max_seq) > 0)
             {
-                max_seq = hdr.seq;
+                max_seq    = hdr.seq;
                 active_idx = i;
-                found = 1;
+                found      = 1;
             }
         }
     }
@@ -737,9 +744,9 @@ MKV_Error_t mkv_scan(void)
     }
 
     g_mkv.active_sector = active_idx;
-    g_mkv.sector_seq = max_seq;
-    g_mkv.write_offset = MKV_ScanWriteOffset(active_idx);
-    g_mkv.initialized = 1;
+    g_mkv.sector_seq    = max_seq;
+    g_mkv.write_offset  = MKV_ScanWriteOffset(active_idx);
+    g_mkv.initialized   = 1;
 
     return MKV_OK;
 }
@@ -754,18 +761,16 @@ MKV_Error_t mkv_format(void)
         }
     }
 
-    MKV_SectorHeader_t hdr = {
-        .magic = MKV_MAGIC,
-        .seq = 1};
-    if (g_mkv.flash_ops.write_func(MKV_SECTOR_ADDR(0), (uint8_t *)&hdr, sizeof(hdr)) != 0)
+    MKV_SectorHeader_t hdr = {.magic = MKV_MAGIC, .seq = 1};
+    if (g_mkv.flash_ops.write_func(MKV_SECTOR_ADDR(0), (uint8_t *) &hdr, sizeof(hdr)) != 0)
     {
         return MKV_ERR_FLASH;
     }
 
     g_mkv.active_sector = 0;
-    g_mkv.sector_seq = 1;
-    g_mkv.write_offset = MKV_SECTOR_HEADER_SIZE;
-    g_mkv.initialized = 1;
+    g_mkv.sector_seq    = 1;
+    g_mkv.write_offset  = MKV_SECTOR_HEADER_SIZE;
+    g_mkv.initialized   = 1;
 
     return MKV_OK;
 }
@@ -799,10 +804,9 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
     if (g_mkv.write_offset + entry_size > g_mkv.flash_ops.sector_size)
     {
         MKV_SectorHeader_t next_hdr;
-        uint8_t next_idx = (g_mkv.active_sector + 1) % g_mkv.flash_ops.sector_count;
+        uint8_t            next_idx = (g_mkv.active_sector + 1) % g_mkv.flash_ops.sector_count;
 
-        if (MKV_ReadSectorHeader(next_idx, &next_hdr) == 0 &&
-            next_hdr.magic == MKV_MAGIC)
+        if (MKV_ReadSectorHeader(next_idx, &next_hdr) == 0 && next_hdr.magic == MKV_MAGIC)
         {
             log_i("Next sector %u is valid, compacting...", next_idx);
             MKV_Error_t err = MKV_Compact();
@@ -826,10 +830,10 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
         }
     }
 
-    uint8_t buf[MKV_ENTRY_HEADER_SIZE + MKV_MAX_KEY_LEN + MKV_MAX_VALUE_LEN + MKV_ENTRY_CRC_SIZE];
-    MKV_Entry_t *entry = (MKV_Entry_t *)buf;
+    uint8_t      buf[MKV_ENTRY_HEADER_SIZE + MKV_MAX_KEY_LEN + MKV_MAX_VALUE_LEN + MKV_ENTRY_CRC_SIZE];
+    MKV_Entry_t *entry = (MKV_Entry_t *) buf;
     log_d("Writing entry at offset %u in sector %u", g_mkv.write_offset, g_mkv.active_sector);
-    entry->state = MKV_STATE_WRITING;
+    entry->state   = MKV_STATE_WRITING;
     entry->key_len = key_len;
     entry->val_len = len;
     log_i("Preparing to write entry: key='%s', key_len=%u, val_len=%u", key, key_len, len);
@@ -847,7 +851,7 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
     log_i("Wrote entry key='%s' at addr 0x%08X", key, write_addr);
 
     uint16_t valid = MKV_STATE_VALID;
-    if (g_mkv.flash_ops.write_func(write_addr, (uint8_t *)&valid, 2) != 0)
+    if (g_mkv.flash_ops.write_func(write_addr, (uint8_t *) &valid, 2) != 0)
     {
         return MKV_ERR_FLASH;
     }
@@ -883,7 +887,9 @@ MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *ou
         uint8_t copy_len = (cached->val_len < buf_size) ? cached->val_len : buf_size;
         memcpy(buffer, cached->value, copy_len);
         if (out_len)
+        {
             *out_len = copy_len;
+        }
         log_d("Cache hit for key='%s'", key);
         return MKV_OK;
     }
@@ -891,7 +897,7 @@ MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *ou
 #endif
 
     MKV_Entry_t entry;
-    uint32_t addr = MKV_FindKey(key, &entry);
+    uint32_t    addr = MKV_FindKey(key, &entry);
     log_d("Get key='%s', found at addr 0x%08X", key, addr);
     if (addr == 0)
     {
@@ -938,7 +944,7 @@ uint8_t mkv_exists(const char *key)
     }
 
     MKV_Entry_t entry;
-    uint32_t addr = MKV_FindKey(key, &entry);
+    uint32_t    addr = MKV_FindKey(key, &entry);
 
     return (addr != 0 && entry.val_len > 0);
 }
@@ -946,16 +952,22 @@ uint8_t mkv_exists(const char *key)
 void mkv_get_usage(uint32_t *used, uint32_t *total)
 {
     if (used)
+    {
         *used = g_mkv.write_offset;
+    }
     if (total)
+    {
         *total = g_mkv.flash_ops.sector_size * g_mkv.flash_ops.sector_count;
+    }
 }
 
 #if MKV_INCREMENTAL_GC
 uint8_t mkv_gc_step(uint8_t steps)
 {
     if (!g_mkv.initialized)
+    {
         return 0;
+    }
 
     // 检查是否需要启动GC
     if (!g_mkv.gc_active && MKV_ShouldStartGC())
@@ -964,13 +976,17 @@ uint8_t mkv_gc_step(uint8_t steps)
     }
 
     if (!g_mkv.gc_active)
+    {
         return 0;
+    }
 
     // 执行指定步数
     for (uint8_t i = 0; i < steps; i++)
     {
         if (!MKV_IncrementalGCStep())
+        {
             return 0; // GC完成
+        }
     }
 
     return 1; // 还在进行中
@@ -986,15 +1002,17 @@ uint8_t mkv_gc_is_active(void)
 void mkv_get_cache_stats(MKV_CacheStats_t *stats)
 {
     if (!stats)
+    {
         return;
+    }
 
-    stats->hit_count = g_mkv.cache.hit_count;
+    stats->hit_count  = g_mkv.cache.hit_count;
     stats->miss_count = g_mkv.cache.miss_count;
 
     uint32_t total = stats->hit_count + stats->miss_count;
     if (total > 0)
     {
-        stats->hit_rate = (float)stats->hit_count / total * 100.0f;
+        stats->hit_rate = (float) stats->hit_count / total * 100.0f;
     }
     else
     {
@@ -1012,7 +1030,7 @@ void mkv_cache_clear(void)
 
 void mkv_set_defaults(const MKV_Default_t *defaults, uint16_t count)
 {
-    g_mkv.defaults = defaults;
+    g_mkv.defaults      = defaults;
     g_mkv.default_count = count;
     log_i("Set default table: %u entries", count);
 }
@@ -1020,15 +1038,16 @@ void mkv_set_defaults(const MKV_Default_t *defaults, uint16_t count)
 const MKV_Default_t *mkv_find_default(const char *key)
 {
     if (!key || !g_mkv.defaults)
+    {
         return NULL;
+    }
 
     uint8_t key_len = strlen(key);
 
     for (uint16_t i = 0; i < g_mkv.default_count; i++)
     {
         const MKV_Default_t *def = &g_mkv.defaults[i];
-        if (def->key && strlen(def->key) == key_len &&
-            memcmp(def->key, key, key_len) == 0)
+        if (def->key && strlen(def->key) == key_len && memcmp(def->key, key, key_len) == 0)
         {
             return def;
         }
@@ -1040,7 +1059,9 @@ const MKV_Default_t *mkv_find_default(const char *key)
 MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uint8_t *out_len)
 {
     if (!key || !buffer)
+    {
         return MKV_ERR_INVALID;
+    }
 
     MKV_Error_t err = mkv_get(key, buffer, buf_size, out_len);
     if (err == MKV_OK)
@@ -1054,7 +1075,9 @@ MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uin
         uint8_t copy_len = (def->len < buf_size) ? def->len : buf_size;
         memcpy(buffer, def->value, copy_len);
         if (out_len)
+        {
             *out_len = copy_len;
+        }
         log_d("Return default value for key='%s'", key);
         return MKV_OK;
     }
@@ -1065,7 +1088,9 @@ MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uin
 MKV_Error_t mkv_reset_key(const char *key)
 {
     if (!key)
+    {
         return MKV_ERR_INVALID;
+    }
 
     const MKV_Default_t *def = mkv_find_default(key);
     if (!def)
@@ -1086,7 +1111,9 @@ MKV_Error_t mkv_reset_key(const char *key)
 MKV_Error_t mkv_reset_all(void)
 {
     if (!g_mkv.defaults)
+    {
         return MKV_ERR_INVALID;
+    }
 
     log_i("Reset all %u keys to defaults...", g_mkv.default_count);
 

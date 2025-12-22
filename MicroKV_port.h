@@ -13,24 +13,25 @@
 #include "MicroKV.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/* ===========================================================================
- *                          接口函数声明
- * ===========================================================================*/
+    /* ===========================================================================
+     *                          接口函数声明
+     * ===========================================================================*/
 
-/**
- * @brief MicroKV 初始化
- * @return MKV_OK 成功，其他失败
- * @note 在使用其他 mkv_xxx() 函数前调用
- */
-MKV_Error_t mkv_init(void);
+    /**
+     * @brief MicroKV 初始化
+     * @return MKV_OK 成功，其他失败
+     * @note 在使用其他 mkv_xxx() 函数前调用
+     */
+    MKV_Error_t mkv_init(void);
 
-/**
- * @brief MicroKV维护任务（可选）
- */
-void mkv_task(void);
+    /**
+     * @brief MicroKV维护任务（可选）
+     */
+    void mkv_task(void);
 
 #ifdef __cplusplus
 }

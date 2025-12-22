@@ -4,9 +4,9 @@
  * @author liu
  * @date 2025-12-20
  * @version 2.0
- * 
+ *
  * @details MicroKV 是一个专为嵌入式系统设计的轻量级KV存储库，特点：
- * 
+ *
  * ## 主要特性
  * - 快速初始化（几毫秒）
  * - 追加写入，无需擦除
@@ -16,27 +16,27 @@
  * - LFU 缓存加速读取
  * - 增量GC分摊延迟
  * - 默认值支持
- * 
+ *
  * ## 使用示例
  * @code
  * // 1. 初始化
  * mkv_init();
- * 
+ *
  * // 2. 写入数据
  * uint32_t timeout = 5000;
  * mkv_set("timeout", &timeout, sizeof(timeout));
  * mkv_set("wifi_ssid", "MyWiFi", 6);
- * 
+ *
  * // 3. 读取数据
  * uint32_t value;
  * uint8_t len;
  * if (mkv_get("timeout", &value, sizeof(value), &len) == MKV_OK) {
  *     printf("timeout = %u\n", value);
  * }
- * 
+ *
  * // 4. 删除数据
  * mkv_del("timeout");
- * 
+ *
  * // 5. 默认值支持
  * static const MKV_Default_t defaults[] = {
  *     MKV_DEF_STR("wifi_ssid", "DefaultSSID"),
@@ -45,19 +45,19 @@
  * mkv_set_defaults(defaults, MKV_DEFAULT_TABLE_SIZE(defaults));
  * mkv_get_default("wifi_ssid", buffer, sizeof(buffer), &len);
  * @endcode
- * 
+ *
  * ## 内存布局
  * @code
  * Flash布局:
  * +-------------+-------------+-----+-------------+
  * | Sector 0    | Sector 1    | ... | Sector N-1  |
  * +-------------+-------------+-----+-------------+
- * 
+ *
  * 扇区结构:
  * +---------+---------+---------+-----+---------+
  * | Header  | Entry 1 | Entry 2 | ... | 0xFFFF  |
  * +---------+---------+---------+-----+---------+
- * 
+ *
  * 条目结构:
  * +-------+-----+-----+-----+-------+------+
  * | State | KL  | VL  | Key | Value | CRC  |
@@ -77,7 +77,7 @@
 
 /* 魔数和状态 */
 /** @brief 扇区魔数，用于验证扇区有效性 */
-#define MKV_MAGIC 0x4B56         // "KV"
+#define MKV_MAGIC 0x4B56 // "KV"
 
 /** @brief 条目状态：已擦除（Flash擦除后的初始状态） */
 #define MKV_STATE_ERASED 0xFFFF
@@ -95,9 +95,9 @@
  */
 typedef struct
 {
-    const char *key;            // 键名
-    const void *value;          // 默认值指针
-    uint8_t     len;            // 值长度
+    const char *key;   // 键名
+    const void *value; // 默认值指针
+    uint8_t     len;   // 值长度
 } MKV_Default_t;
 
 /**
@@ -106,8 +106,8 @@ typedef struct
  */
 typedef struct __attribute__((packed))
 {
-    uint16_t magic;   /**< 魔数 0x4B56 */
-    uint16_t seq;     /**< 序号（用于判断哪个扇区更新） */
+    uint16_t magic; /**< 魔数 0x4B56 */
+    uint16_t seq;   /**< 序号（用于判断哪个扇区更新） */
 } MKV_SectorHeader_t;
 
 /** @brief 扇区头大小（4字节） */
@@ -119,11 +119,11 @@ typedef struct __attribute__((packed))
  */
 typedef enum
 {
-    MKV_OK = 0,            /**< 操作成功 */
-    MKV_ERR_NOT_FOUND,     /**< 键不存在 */
-    MKV_ERR_NO_SPACE,      /**< 空间不足 */
-    MKV_ERR_INVALID,       /**< 参数无效 */
-    MKV_ERR_FLASH,         /**< Flash操作失败 */
+    MKV_OK = 0,        /**< 操作成功 */
+    MKV_ERR_NOT_FOUND, /**< 键不存在 */
+    MKV_ERR_NO_SPACE,  /**< 空间不足 */
+    MKV_ERR_INVALID,   /**< 参数无效 */
+    MKV_ERR_FLASH,     /**< Flash操作失败 */
 } MKV_Error_t;
 
 /* ==================== KV条目结构 ==================== */
@@ -134,9 +134,9 @@ typedef enum
  */
 typedef struct __attribute__((packed))
 {
-    uint16_t state;    /**< 条目状态: MKV_STATE_ERASED/WRITING/VALID */
-    uint8_t key_len;   /**< 键长度 */
-    uint8_t val_len;   /**< 值长度 */
+    uint16_t state;   /**< 条目状态: MKV_STATE_ERASED/WRITING/VALID */
+    uint8_t  key_len; /**< 键长度 */
+    uint8_t  val_len; /**< 值长度 */
     // 后面紧跟: key[key_len] + value[val_len] + crc16[2]
 } MKV_Entry_t;
 
@@ -154,12 +154,12 @@ typedef struct __attribute__((packed))
  */
 typedef struct
 {
-    char key[MKV_MAX_KEY_LEN];          /**< 键名 */
-    uint8_t value[MKV_MAX_VALUE_LEN];   /**< 缓存的值 */
-    uint8_t key_len;                    /**< 键长度 */
-    uint8_t val_len;                    /**< 值长度 */
-    uint8_t valid;                      /**< 缓存有效标志 */
-    uint32_t access_count;              /**< LFU: 访问次数 */
+    char     key[MKV_MAX_KEY_LEN];     /**< 键名 */
+    uint8_t  value[MKV_MAX_VALUE_LEN]; /**< 缓存的值 */
+    uint8_t  key_len;                  /**< 键长度 */
+    uint8_t  val_len;                  /**< 值长度 */
+    uint8_t  valid;                    /**< 缓存有效标志 */
+    uint32_t access_count;             /**< LFU: 访问次数 */
 } MKV_CacheEntry_t;
 
 /**
@@ -167,9 +167,9 @@ typedef struct
  */
 typedef struct
 {
-    uint32_t hit_count;      /**< 缓存命中次数 */
-    uint32_t miss_count;     /**< 缓存未命中次数 */
-    float hit_rate;          /**< 缓存命中率（%） */
+    uint32_t hit_count;  /**< 缓存命中次数 */
+    uint32_t miss_count; /**< 缓存未命中次数 */
+    float    hit_rate;   /**< 缓存命中率（%） */
 } MKV_CacheStats_t;
 #endif
 
@@ -206,15 +206,15 @@ typedef int (*MKV_EraseFunc_t)(uint32_t addr);
  */
 typedef struct
 {
-    MKV_ReadFunc_t read_func;     /**< Flash读取函数 */
-    MKV_WriteFunc_t write_func;   /**< Flash写入函数 */
-    MKV_EraseFunc_t erase_func;   /**< Flash擦除函数 */
-    
+    MKV_ReadFunc_t  read_func;  /**< Flash读取函数 */
+    MKV_WriteFunc_t write_func; /**< Flash写入函数 */
+    MKV_EraseFunc_t erase_func; /**< Flash擦除函数 */
+
     /* Flash配置 */
-    uint32_t flash_base;          /**< Flash基地址 */
-    uint32_t sector_size;         /**< 扇区大小（字节） */
-    uint8_t  sector_count;        /**< 扇区数量 */
-    uint8_t  align_size;          /**< 对齐字节数 (2=半字对齐, 4=字对齐) */
+    uint32_t flash_base;   /**< Flash基地址 */
+    uint32_t sector_size;  /**< 扇区大小（字节） */
+    uint8_t  sector_count; /**< 扇区数量 */
+    uint8_t  align_size;   /**< 对齐字节数 (2=半字对齐, 4=字对齐) */
 } MKV_FlashOps_t;
 
 #if MKV_CACHE_ENABLE
@@ -222,8 +222,8 @@ typedef struct
 typedef struct
 {
     MKV_CacheEntry_t entries[MKV_CACHE_SIZE]; // 缓存条目数组
-    uint32_t hit_count;        // 命中次数
-    uint32_t miss_count;       // 未命中次数
+    uint32_t         hit_count;               // 命中次数
+    uint32_t         miss_count;              // 未命中次数
 } MKV_Cache_t;
 #endif
 
@@ -234,29 +234,29 @@ typedef struct
 typedef struct
 {
     /* Flash操作回调和配置 */
-    MKV_FlashOps_t flash_ops;       /**< Flash操作函数和配置 */
-    
+    MKV_FlashOps_t flash_ops; /**< Flash操作函数和配置 */
+
     /* 运行状态 */
-    uint8_t  initialized;           /**< 初始化标志 */
-    uint8_t  active_sector;         /**< 当前活跃扇区索引 */
-    uint16_t sector_seq;            /**< 当前扇区序号 */
-    uint32_t write_offset;          /**< 下一个写入位置 */
-    
+    uint8_t  initialized;   /**< 初始化标志 */
+    uint8_t  active_sector; /**< 当前活跃扇区索引 */
+    uint16_t sector_seq;    /**< 当前扇区序号 */
+    uint32_t write_offset;  /**< 下一个写入位置 */
+
 #if MKV_INCREMENTAL_GC
     /* 增量GC状态 */
-    uint8_t  gc_src_sector;         /**< GC源扇区索引 */
-    uint32_t gc_src_offset;         /**< GC源扇区当前扫描位置 */
-    uint8_t  gc_active;             /**< GC进行中标志 */
-    uint8_t  gc_bitmap[32];         /**< 已迁移键的哈希位图 */
+    uint8_t  gc_src_sector; /**< GC源扇区索引 */
+    uint32_t gc_src_offset; /**< GC源扇区当前扫描位置 */
+    uint8_t  gc_active;     /**< GC进行中标志 */
+    uint8_t  gc_bitmap[32]; /**< 已迁移键的哈希位图 */
 #endif
-    
+
     /* 默认值表 */
-    const MKV_Default_t *defaults;  /**< 默认值表指针 */
+    const MKV_Default_t *defaults;      /**< 默认值表指针 */
     uint16_t             default_count; /**< 默认值条目数量 */
-    
+
 #if MKV_CACHE_ENABLE
     /* 缓存系统 */
-    MKV_Cache_t cache;              /**< 缓存系统 */
+    MKV_Cache_t cache; /**< 缓存系统 */
 #endif
 } MKV_Instance_t;
 
@@ -456,7 +456,7 @@ const MKV_Default_t *mkv_find_default(const char *key);
  * mkv_set_defaults(defaults, MKV_DEFAULT_TABLE_SIZE(defaults));
  * @endcode
  */
-#define MKV_DEFAULT_TABLE_SIZE(table)  (sizeof(table) / sizeof((table)[0]))
+#define MKV_DEFAULT_TABLE_SIZE(table) (sizeof(table) / sizeof((table)[0]))
 
 /**
  * @brief 定义字符串默认值
@@ -467,7 +467,7 @@ const MKV_Default_t *mkv_find_default(const char *key);
  * MKV_DEF_STR("wifi_ssid", "MyWiFi")
  * @endcode
  */
-#define MKV_DEF_STR(k, v)    { .key = (k), .value = (v), .len = sizeof(v) - 1 }
+#define MKV_DEF_STR(k, v) {.key = (k), .value = (v), .len = sizeof(v) - 1}
 
 /**
  * @brief 定义整数默认值
@@ -478,7 +478,7 @@ const MKV_Default_t *mkv_find_default(const char *key);
  * MKV_DEF_INT("timeout", 5000)
  * @endcode
  */
-#define MKV_DEF_INT(k, v)    { .key = (k), .value = &(uint32_t){v}, .len = sizeof(uint32_t) }
+#define MKV_DEF_INT(k, v) {.key = (k), .value = &(uint32_t) {v}, .len = sizeof(uint32_t)}
 
 /**
  * @brief 定义任意类型默认值
@@ -490,6 +490,6 @@ const MKV_Default_t *mkv_find_default(const char *key);
  * MKV_DEF_DATA("mac_addr", mac, sizeof(mac))
  * @endcode
  */
-#define MKV_DEF_DATA(k, v, l) { .key = (k), .value = (v), .len = (l) }
+#define MKV_DEF_DATA(k, v, l) {.key = (k), .value = (v), .len = (l)}
 
 #endif /* __MICROKV_H */
