@@ -77,7 +77,7 @@
 
 /* 魔数和状态 */
 /** @brief 扇区魔数，用于验证扇区有效性 */
-#define MKV_MAGIC 0x4B56 // "KV"
+#define MKV_MAGIC 0x4B56  // "KV"
 
 /** @brief 条目状态：已擦除（Flash擦除后的初始状态） */
 #define MKV_STATE_ERASED 0xFFFF
@@ -95,9 +95,9 @@
  */
 typedef struct
 {
-    const char *key;   // 键名
-    const void *value; // 默认值指针
-    uint8_t     len;   // 值长度
+    const char* key;    // 键名
+    const void* value;  // 默认值指针
+    uint8_t     len;    // 值长度
 } MKV_Default_t;
 
 /**
@@ -182,7 +182,7 @@ typedef struct
  * @param len 数据长度
  * @return int 0=成功，-1=失败
  */
-typedef int (*MKV_ReadFunc_t)(uint32_t addr, uint8_t *buf, uint32_t len);
+typedef int (*MKV_ReadFunc_t)(uint32_t addr, uint8_t* buf, uint32_t len);
 
 /**
  * @brief Flash写入函数类型
@@ -191,7 +191,7 @@ typedef int (*MKV_ReadFunc_t)(uint32_t addr, uint8_t *buf, uint32_t len);
  * @param len 数据长度
  * @return int 0=成功，-1=失败
  */
-typedef int (*MKV_WriteFunc_t)(uint32_t addr, const uint8_t *buf, uint32_t len);
+typedef int (*MKV_WriteFunc_t)(uint32_t addr, const uint8_t* buf, uint32_t len);
 
 /**
  * @brief Flash擦除函数类型
@@ -221,9 +221,9 @@ typedef struct
 /* 缓存系统结构体 */
 typedef struct
 {
-    MKV_CacheEntry_t entries[MKV_CACHE_SIZE]; // 缓存条目数组
-    uint32_t         hit_count;               // 命中次数
-    uint32_t         miss_count;              // 未命中次数
+    MKV_CacheEntry_t entries[MKV_CACHE_SIZE];  // 缓存条目数组
+    uint32_t         hit_count;                // 命中次数
+    uint32_t         miss_count;               // 未命中次数
 } MKV_Cache_t;
 #endif
 
@@ -251,7 +251,7 @@ typedef struct
 #endif
 
     /* 默认值表 */
-    const MKV_Default_t *defaults;      /**< 默认值表指针 */
+    const MKV_Default_t* defaults;      /**< 默认值表指针 */
     uint16_t             default_count; /**< 默认值条目数量 */
 
 #if MKV_CACHE_ENABLE
@@ -270,7 +270,7 @@ typedef struct
  * @retval MKV_ERR_INVALID 参数无效
  * @note 此函数由mkv_init()调用，用户不应直接调用
  */
-MKV_Error_t mkv_internal_init(const MKV_FlashOps_t *ops);
+MKV_Error_t mkv_internal_init(const MKV_FlashOps_t* ops);
 
 /**
  * @brief 扫描并初始化 KV 存储
@@ -295,7 +295,7 @@ MKV_Error_t mkv_scan(void);
  * @retval MKV_ERR_FLASH Flash操作失败
  * @note 如果键已存在，新值会追加在后面（旧值仍在，但不会被读取）
  */
-MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len);
+MKV_Error_t mkv_set(const char* key, const void* value, uint8_t len);
 
 /**
  * @brief 获取键值
@@ -310,7 +310,7 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len);
  * @retval MKV_ERR_FLASH Flash操作失败
  * @note 会优先从缓存中查找，缓存未命中时从 Flash 读取
  */
-MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *out_len);
+MKV_Error_t mkv_get(const char* key, void* buffer, uint8_t buf_size, uint8_t* out_len);
 
 /**
  * @brief 删除键
@@ -319,7 +319,7 @@ MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *ou
  * @retval MKV_OK 成功
  * @note 实际上是写入一个长度为0的条目，不会立即擦除 Flash
  */
-MKV_Error_t mkv_del(const char *key);
+MKV_Error_t mkv_del(const char* key);
 
 /**
  * @brief 检查键是否存在
@@ -328,7 +328,7 @@ MKV_Error_t mkv_del(const char *key);
  * @retval 1 键存在
  * @retval 0 键不存在或已被删除
  */
-uint8_t mkv_exists(const char *key);
+uint8_t mkv_exists(const char* key);
 
 /**
  * @brief 格式化存储区
@@ -345,7 +345,7 @@ MKV_Error_t mkv_format(void);
  * @param total 输出：总字节（可为NULL）
  * @note 已用字节仅指活跃扇区，总字节为所有扇区总和
  */
-void mkv_get_usage(uint32_t *used, uint32_t *total);
+void mkv_get_usage(uint32_t* used, uint32_t* total);
 
 /* ==================== 增量GC API ==================== */
 #if MKV_INCREMENTAL_GC
@@ -377,7 +377,7 @@ uint8_t mkv_gc_is_active(void);
  * @param stats 输出：缓存统计结构体
  * @note 可用于调优缓存大小和策略
  */
-void mkv_get_cache_stats(MKV_CacheStats_t *stats);
+void mkv_get_cache_stats(MKV_CacheStats_t* stats);
 
 /**
  * @brief 清空缓存
@@ -402,7 +402,7 @@ void mkv_cache_clear(void);
  * mkv_set_defaults(my_defaults, MKV_DEFAULT_TABLE_SIZE(my_defaults));
  * @endcode
  */
-void mkv_set_defaults(const MKV_Default_t *defaults, uint16_t count);
+void mkv_set_defaults(const MKV_Default_t* defaults, uint16_t count);
 
 /**
  * @brief 获取值（支持默认值回退）
@@ -416,7 +416,7 @@ void mkv_set_defaults(const MKV_Default_t *defaults, uint16_t count);
  * @note 优先返回Flash中的值，不存在时返回默认值
  * @see mkv_get(), mkv_set_defaults()
  */
-MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uint8_t *out_len);
+MKV_Error_t mkv_get_default(const char* key, void* buffer, uint8_t buf_size, uint8_t* out_len);
 
 /**
  * @brief 重置键为默认值
@@ -427,7 +427,7 @@ MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uin
  * @note 将指定键的值覆盖为默认值表中定义的值
  * @see mkv_reset_all()
  */
-MKV_Error_t mkv_reset_key(const char *key);
+MKV_Error_t mkv_reset_key(const char* key);
 
 /**
  * @brief 重置所有键为默认值
@@ -445,7 +445,7 @@ MKV_Error_t mkv_reset_all(void);
  * @return const MKV_Default_t* 默认值条目指针，NULL表示不存在
  * @note 内部函数，用户一般不直接调用
  */
-const MKV_Default_t *mkv_find_default(const char *key);
+const MKV_Default_t* mkv_find_default(const char* key);
 
 /**
  * @brief 计算默认值表大小

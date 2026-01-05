@@ -61,7 +61,7 @@ static MKV_Instance_t g_mkv = {0};
  * @return uint16_t CRC16校验值
  * @note 使用MODBUS CRC16算法（多项式0xA001）
  */
-static uint16_t MKV_CRC16(const uint8_t *data, uint32_t len)
+static uint16_t MKV_CRC16(const uint8_t* data, uint32_t len)
 {
     uint16_t crc = 0xFFFF;
     for (uint32_t i = 0; i < len; i++)
@@ -83,24 +83,24 @@ static uint16_t MKV_CRC16(const uint8_t *data, uint32_t len)
  * @return MKV_CacheEntry_t* 缓存条目指针，NULL表示未命中
  * @note 命中时会自动增加访问计数（LFU算法）
  */
-static MKV_CacheEntry_t *MKV_CacheFind(const char *key)
+static MKV_CacheEntry_t* MKV_CacheFind(const char* key)
 {
     uint8_t key_len = strlen(key);
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
     {
-        MKV_CacheEntry_t *entry = &g_mkv.cache.entries[i]; // 获取缓存条目
+        MKV_CacheEntry_t* entry = &g_mkv.cache.entries[i];  // 获取缓存条目
 
-        if (entry->valid && entry->key_len == key_len && memcmp(entry->key, key, key_len) == 0) // 比较键名
+        if (entry->valid && entry->key_len == key_len && memcmp(entry->key, key, key_len) == 0)  // 比较键名
         {
             // 命中，更新访问计数
-            entry->access_count++;   // 增加访问次数
-            g_mkv.cache.hit_count++; // 增加命中计数
+            entry->access_count++;    // 增加访问次数
+            g_mkv.cache.hit_count++;  // 增加命中计数
             return entry;
         }
     }
     // 未命中
-    g_mkv.cache.miss_count++; // 增加未命中计数
+    g_mkv.cache.miss_count++;  // 增加未命中计数
     return NULL;
 }
 /**
@@ -136,9 +136,9 @@ static uint8_t MKV_CacheFindLFU(void)
  * @param val_len 值长度
  * @note 如果键已在缓存中则更新，否则使用LFU算法替换
  */
-static void MKV_CacheUpdate(const char *key, const void *value, uint8_t val_len)
+static void MKV_CacheUpdate(const char* key, const void* value, uint8_t val_len)
 {
-    MKV_CacheEntry_t *entry   = NULL;
+    MKV_CacheEntry_t* entry   = NULL;
     uint8_t           key_len = strlen(key);
 
     for (uint8_t i = 0; i < MKV_CACHE_SIZE; i++)
@@ -169,7 +169,7 @@ static void MKV_CacheUpdate(const char *key, const void *value, uint8_t val_len)
  * @brief 从缓存中移除键
  * @param key 键名
  */
-static void MKV_CacheRemove(const char *key)
+static void MKV_CacheRemove(const char* key)
 {
     uint8_t key_len = strlen(key);
 
@@ -195,7 +195,7 @@ static void MKV_CacheRemove(const char *key)
  * @return uint8_t 8位哈希值（0-255）
  * @note 使用简单的31倍乘法哈希，用于GC位图加速
  */
-static uint8_t MKV_HashKey(const char *key, uint8_t len)
+static uint8_t MKV_HashKey(const char* key, uint8_t len)
 {
     uint16_t hash = 0;
     for (uint8_t i = 0; i < len; i++)
@@ -210,7 +210,7 @@ static uint8_t MKV_HashKey(const char *key, uint8_t len)
  * @param bitmap 位图数组
  * @param idx 位索引（0-255）
  */
-static inline void MKV_BitmapSet(uint8_t *bitmap, uint8_t idx)
+static inline void MKV_BitmapSet(uint8_t* bitmap, uint8_t idx)
 {
     bitmap[idx >> 3] |= (1 << (idx & 7));
 }
@@ -221,7 +221,7 @@ static inline void MKV_BitmapSet(uint8_t *bitmap, uint8_t idx)
  * @param idx 位索引（0-255）
  * @return uint8_t 1=已设置，0=未设置
  */
-static inline uint8_t MKV_BitmapTest(const uint8_t *bitmap, uint8_t idx)
+static inline uint8_t MKV_BitmapTest(const uint8_t* bitmap, uint8_t idx)
 {
     return (bitmap[idx >> 3] >> (idx & 7)) & 1;
 }
@@ -234,9 +234,9 @@ static inline uint8_t MKV_BitmapTest(const uint8_t *bitmap, uint8_t idx)
  * @param hdr 输出：扇区头结构体
  * @return int 0=成功，-1=失败
  */
-static int MKV_ReadSectorHeader(uint8_t idx, MKV_SectorHeader_t *hdr)
+static int MKV_ReadSectorHeader(uint8_t idx, MKV_SectorHeader_t* hdr)
 {
-    return g_mkv.flash_ops.read_func(MKV_SECTOR_ADDR(idx), (uint8_t *) hdr, sizeof(MKV_SectorHeader_t));
+    return g_mkv.flash_ops.read_func(MKV_SECTOR_ADDR(idx), (uint8_t*) hdr, sizeof(MKV_SectorHeader_t));
 }
 
 /**
@@ -269,7 +269,7 @@ static uint32_t MKV_ScanWriteOffset(uint8_t idx)
     while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t*) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -294,7 +294,7 @@ static uint32_t MKV_ScanWriteOffset(uint8_t idx)
  * @return uint32_t 条目的Flash地址，0表示未找到
  * @note 返回最后一次出现的位置（最新的值）
  */
-static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *out_entry)
+static uint32_t MKV_FindKeyInSector(uint8_t idx, const char* key, MKV_Entry_t* out_entry)
 {
     uint32_t sector     = MKV_SECTOR_ADDR(idx);
     uint32_t found_addr = 0;
@@ -304,7 +304,7 @@ static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *o
     while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t*) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -319,7 +319,7 @@ static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *o
         if (entry.state == MKV_STATE_VALID && entry.key_len == key_len)
         {
             char temp_key[MKV_MAX_KEY_LEN];
-            g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) temp_key, key_len);
+            g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t*) temp_key, key_len);
 
             if (memcmp(temp_key, key, key_len) == 0)
             {
@@ -344,7 +344,7 @@ static uint32_t MKV_FindKeyInSector(uint8_t idx, const char *key, MKV_Entry_t *o
  * @return uint32_t 条目的Flash地址，0表示未找到
  * @note 从活跃扇区开始反向搜索，优先返回最新的值
  */
-static uint32_t MKV_FindKey(const char *key, MKV_Entry_t *out_entry)
+static uint32_t MKV_FindKey(const char* key, MKV_Entry_t* out_entry)
 {
     for (uint8_t i = 0; i < g_mkv.flash_ops.sector_count; i++)
     {
@@ -385,7 +385,7 @@ static MKV_Error_t MKV_SwitchToNextSector(void)
     }
 
     MKV_SectorHeader_t hdr = {.magic = MKV_MAGIC, .seq = g_mkv.sector_seq + 1};
-    if (g_mkv.flash_ops.write_func(next_addr, (uint8_t *) &hdr, sizeof(hdr)) != 0)
+    if (g_mkv.flash_ops.write_func(next_addr, (uint8_t*) &hdr, sizeof(hdr)) != 0)
     {
         return MKV_ERR_FLASH;
     }
@@ -432,7 +432,7 @@ static MKV_Error_t MKV_Compact(void)
         while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
         {
             MKV_Entry_t entry;
-            if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
+            if (g_mkv.flash_ops.read_func(sector + offset, (uint8_t*) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
             {
                 break;
             }
@@ -446,7 +446,7 @@ static MKV_Error_t MKV_Compact(void)
             if (entry.state == MKV_STATE_VALID && entry.val_len > 0)
             {
                 char key[MKV_MAX_KEY_LEN] = {0};
-                g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) key, entry.key_len);
+                g_mkv.flash_ops.read_func(sector + offset + MKV_ENTRY_HEADER_SIZE, (uint8_t*) key, entry.key_len);
 
                 uint8_t hash      = MKV_HashKey(key, entry.key_len);
                 uint8_t need_copy = 0;
@@ -515,7 +515,7 @@ static uint8_t MKV_ShouldStartGC(void)
 {
     if (g_mkv.gc_active)
     {
-        return 0; // 已经在进行中
+        return 0;  // 已经在进行中
     }
 
     // 计算使用率
@@ -556,7 +556,7 @@ static void MKV_StartIncrementalGC(void)
 
     if (oldest_seq == 0xFFFF)
     {
-        return; // 没有旧扇区
+        return;  // 没有旧扇区
     }
 
     g_mkv.gc_src_sector = oldest_idx;
@@ -585,7 +585,7 @@ static uint8_t MKV_IncrementalGCStep(void)
     while (g_mkv.gc_src_offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
     {
         MKV_Entry_t entry;
-        if (g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset, (uint8_t *) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
+        if (g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset, (uint8_t*) &entry, MKV_ENTRY_HEADER_SIZE) != 0)
         {
             break;
         }
@@ -607,7 +607,7 @@ static uint8_t MKV_IncrementalGCStep(void)
 
         // 读取键名
         char key[MKV_MAX_KEY_LEN] = {0};
-        g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset + MKV_ENTRY_HEADER_SIZE, (uint8_t *) key, entry.key_len);
+        g_mkv.flash_ops.read_func(sector + g_mkv.gc_src_offset + MKV_ENTRY_HEADER_SIZE, (uint8_t*) key, entry.key_len);
 
         uint8_t hash = MKV_HashKey(key, entry.key_len);
 
@@ -641,7 +641,7 @@ static uint8_t MKV_IncrementalGCStep(void)
         }
 
         g_mkv.gc_src_offset += entry_size;
-        return 1; // 处理了一个条目，下次继续
+        return 1;  // 处理了一个条目，下次继续
     }
 
     // 扫描完成，可以擦除源扇区
@@ -680,7 +680,7 @@ static void MKV_DoIncrementalGC(void)
 
 /* ==================== 公共 API ==================== */
 
-MKV_Error_t mkv_internal_init(const MKV_FlashOps_t *ops)
+MKV_Error_t mkv_internal_init(const MKV_FlashOps_t* ops)
 {
     if (!ops)
     {
@@ -762,7 +762,7 @@ MKV_Error_t mkv_format(void)
     }
 
     MKV_SectorHeader_t hdr = {.magic = MKV_MAGIC, .seq = 1};
-    if (g_mkv.flash_ops.write_func(MKV_SECTOR_ADDR(0), (uint8_t *) &hdr, sizeof(hdr)) != 0)
+    if (g_mkv.flash_ops.write_func(MKV_SECTOR_ADDR(0), (uint8_t*) &hdr, sizeof(hdr)) != 0)
     {
         return MKV_ERR_FLASH;
     }
@@ -775,7 +775,7 @@ MKV_Error_t mkv_format(void)
     return MKV_OK;
 }
 
-MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
+MKV_Error_t mkv_set(const char* key, const void* value, uint8_t len)
 {
     if (!g_mkv.initialized)
     {
@@ -831,7 +831,7 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
     }
 
     uint8_t      buf[MKV_ENTRY_HEADER_SIZE + MKV_MAX_KEY_LEN + MKV_MAX_VALUE_LEN + MKV_ENTRY_CRC_SIZE];
-    MKV_Entry_t *entry = (MKV_Entry_t *) buf;
+    MKV_Entry_t* entry = (MKV_Entry_t*) buf;
     log_d("Writing entry at offset %u in sector %u", g_mkv.write_offset, g_mkv.active_sector);
     entry->state   = MKV_STATE_WRITING;
     entry->key_len = key_len;
@@ -851,7 +851,7 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
     log_i("Wrote entry key='%s' at addr 0x%08X", key, write_addr);
 
     uint16_t valid = MKV_STATE_VALID;
-    if (g_mkv.flash_ops.write_func(write_addr, (uint8_t *) &valid, 2) != 0)
+    if (g_mkv.flash_ops.write_func(write_addr, (uint8_t*) &valid, 2) != 0)
     {
         return MKV_ERR_FLASH;
     }
@@ -873,7 +873,7 @@ MKV_Error_t mkv_set(const char *key, const void *value, uint8_t len)
     return MKV_OK;
 }
 
-MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *out_len)
+MKV_Error_t mkv_get(const char* key, void* buffer, uint8_t buf_size, uint8_t* out_len)
 {
     if (!g_mkv.initialized || !key || !buffer)
     {
@@ -881,7 +881,7 @@ MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *ou
     }
 
 #if MKV_CACHE_ENABLE
-    MKV_CacheEntry_t *cached = MKV_CacheFind(key);
+    MKV_CacheEntry_t* cached = MKV_CacheFind(key);
     if (cached)
     {
         uint8_t copy_len = (cached->val_len < buf_size) ? cached->val_len : buf_size;
@@ -927,7 +927,7 @@ MKV_Error_t mkv_get(const char *key, void *buffer, uint8_t buf_size, uint8_t *ou
     return MKV_OK;
 }
 
-MKV_Error_t mkv_del(const char *key)
+MKV_Error_t mkv_del(const char* key)
 {
 #if MKV_CACHE_ENABLE
     MKV_CacheRemove(key);
@@ -936,7 +936,7 @@ MKV_Error_t mkv_del(const char *key)
     return mkv_set(key, &dummy, 0);
 }
 
-uint8_t mkv_exists(const char *key)
+uint8_t mkv_exists(const char* key)
 {
     if (!g_mkv.initialized || !key)
     {
@@ -949,7 +949,7 @@ uint8_t mkv_exists(const char *key)
     return (addr != 0 && entry.val_len > 0);
 }
 
-void mkv_get_usage(uint32_t *used, uint32_t *total)
+void mkv_get_usage(uint32_t* used, uint32_t* total)
 {
     if (used)
     {
@@ -985,11 +985,11 @@ uint8_t mkv_gc_step(uint8_t steps)
     {
         if (!MKV_IncrementalGCStep())
         {
-            return 0; // GC完成
+            return 0;  // GC完成
         }
     }
 
-    return 1; // 还在进行中
+    return 1;  // 还在进行中
 }
 
 uint8_t mkv_gc_is_active(void)
@@ -999,7 +999,7 @@ uint8_t mkv_gc_is_active(void)
 #endif
 
 #if MKV_CACHE_ENABLE
-void mkv_get_cache_stats(MKV_CacheStats_t *stats)
+void mkv_get_cache_stats(MKV_CacheStats_t* stats)
 {
     if (!stats)
     {
@@ -1028,14 +1028,14 @@ void mkv_cache_clear(void)
 
 /* ==================== 默认值 API 实现 ==================== */
 
-void mkv_set_defaults(const MKV_Default_t *defaults, uint16_t count)
+void mkv_set_defaults(const MKV_Default_t* defaults, uint16_t count)
 {
     g_mkv.defaults      = defaults;
     g_mkv.default_count = count;
     log_i("Set default table: %u entries", count);
 }
 
-const MKV_Default_t *mkv_find_default(const char *key)
+const MKV_Default_t* mkv_find_default(const char* key)
 {
     if (!key || !g_mkv.defaults)
     {
@@ -1046,7 +1046,7 @@ const MKV_Default_t *mkv_find_default(const char *key)
 
     for (uint16_t i = 0; i < g_mkv.default_count; i++)
     {
-        const MKV_Default_t *def = &g_mkv.defaults[i];
+        const MKV_Default_t* def = &g_mkv.defaults[i];
         if (def->key && strlen(def->key) == key_len && memcmp(def->key, key, key_len) == 0)
         {
             return def;
@@ -1056,7 +1056,7 @@ const MKV_Default_t *mkv_find_default(const char *key)
     return NULL;
 }
 
-MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uint8_t *out_len)
+MKV_Error_t mkv_get_default(const char* key, void* buffer, uint8_t buf_size, uint8_t* out_len)
 {
     if (!key || !buffer)
     {
@@ -1069,7 +1069,7 @@ MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uin
         return MKV_OK;
     }
 
-    const MKV_Default_t *def = mkv_find_default(key);
+    const MKV_Default_t* def = mkv_find_default(key);
     if (def)
     {
         uint8_t copy_len = (def->len < buf_size) ? def->len : buf_size;
@@ -1085,14 +1085,14 @@ MKV_Error_t mkv_get_default(const char *key, void *buffer, uint8_t buf_size, uin
     return MKV_ERR_NOT_FOUND;
 }
 
-MKV_Error_t mkv_reset_key(const char *key)
+MKV_Error_t mkv_reset_key(const char* key)
 {
     if (!key)
     {
         return MKV_ERR_INVALID;
     }
 
-    const MKV_Default_t *def = mkv_find_default(key);
+    const MKV_Default_t* def = mkv_find_default(key);
     if (!def)
     {
         log_w("No default value for key='%s'", key);
@@ -1119,7 +1119,7 @@ MKV_Error_t mkv_reset_all(void)
 
     for (uint16_t i = 0; i < g_mkv.default_count; i++)
     {
-        const MKV_Default_t *def = &g_mkv.defaults[i];
+        const MKV_Default_t* def = &g_mkv.defaults[i];
         if (def->key && def->value && def->len > 0)
         {
             MKV_Error_t err = mkv_set(def->key, def->value, def->len);

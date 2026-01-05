@@ -14,9 +14,10 @@
  * @note 移植到其他平台时，只需修改本文件中的Flash操作函数即可
  */
 
-#include "MicroKV_port.h"
 #include "MicroKV.h"
+#include "MicroKV_port.h"
 #include "stm32f10x.h"
+
 #include <mlog.h>
 
 /* ===========================================================================
@@ -41,12 +42,12 @@
  *       - SPI Flash: 需要SPI读取命令
  *       - 模拟Flash: 从数组读取
  */
-static int mkv_flash_read_impl(uint32_t addr, uint8_t *buf, uint32_t len)
+static int mkv_flash_read_impl(uint32_t addr, uint8_t* buf, uint32_t len)
 {
     /* STM32内部Flash直接内存映射读取 */
     for (uint32_t i = 0; i < len; i++)
     {
-        buf[i] = *(__IO uint8_t *) (addr + i);
+        buf[i] = *(__IO uint8_t*) (addr + i);
     }
     return 0; /* 成功 */
 }
@@ -67,7 +68,7 @@ static int mkv_flash_read_impl(uint32_t addr, uint8_t *buf, uint32_t len)
  *       - 验证写入结果
  * @warning Flash特性：只能将bit从1变为0，不能从0变为1，写入前必须擦除
  */
-static int mkv_flash_write_impl(uint32_t addr, const uint8_t *buf, uint32_t len)
+static int mkv_flash_write_impl(uint32_t addr, const uint8_t* buf, uint32_t len)
 {
     /* 检查地址范围 */
     if (addr < MKV_FLASH_BASE || addr + len > MKV_FLASH_SIZE + MKV_FLASH_BASE)
@@ -90,7 +91,7 @@ static int mkv_flash_write_impl(uint32_t addr, const uint8_t *buf, uint32_t len)
     FLASH_Status   flash_status = FLASH_COMPLETE;
     uint32_t       write_addr   = addr;
     uint32_t       remaining    = len;
-    const uint8_t *src_ptr      = buf;
+    const uint8_t* src_ptr      = buf;
 
     /* 处理未对齐的起始地址 */
     if (write_addr & 0x01)
@@ -105,7 +106,7 @@ static int mkv_flash_write_impl(uint32_t addr, const uint8_t *buf, uint32_t len)
     while (remaining >= 2)
     {
         uint16_t half_word     = src_ptr[0] | (src_ptr[1] << 8);
-        uint16_t current_value = *(volatile uint16_t *) write_addr;
+        uint16_t current_value = *(volatile uint16_t*) write_addr;
 
         /* Flash特性：只能将bit从1变为0，不能从0变为1 */
         /* 检查是否需要擦除 */
@@ -137,7 +138,7 @@ static int mkv_flash_write_impl(uint32_t addr, const uint8_t *buf, uint32_t len)
         }
 
         /* 验证写入 */
-        if (*(volatile uint16_t *) write_addr != half_word)
+        if (*(volatile uint16_t*) write_addr != half_word)
         {
             log_e("Flash write verify failed at 0x%08X", write_addr);
             FLASH_Lock();
@@ -215,7 +216,7 @@ static const MKV_FlashOps_t g_mkv_flash_ops = {
     .flash_base   = MKV_FLASH_BASE,
     .sector_size  = MKV_SECTOR_SIZE,
     .sector_count = MKV_SECTOR_COUNT,
-    .align_size   = 2 // STM32内部Flash需要2字节对齐
+    .align_size   = 2  // STM32内部Flash需要2字节对齐
 };
 
 /**
