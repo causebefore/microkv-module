@@ -103,6 +103,7 @@ static MKV_CacheEntry_t* MKV_CacheFind(const char* key)
     g_mkv.cache.miss_count++;  // 增加未命中计数
     return NULL;
 }
+
 /**
  * @brief 查找LFU缓存条目索引
  * @return uint8_t 缓存条目索引（优先返回空闲条目，否则返回访问次数最少的条目）
@@ -129,6 +130,7 @@ static uint8_t MKV_CacheFindLFU(void)
 
     return lfu_idx;
 }
+
 /**
  * @brief 更新缓存
  * @param key 键名
@@ -243,9 +245,9 @@ static int MKV_ReadSectorHeader(uint8_t idx, MKV_SectorHeader_t* hdr)
  * @brief 检查扇区是否有效
  * @param idx 扇区索引
  * @return uint8_t 1=有效，0=无效
- * @note 通过检查魔数判断扇区是否已格式化
+ * @note 通过检查魔数判断扇区是否已格式化，现在导出供TLV使用
  */
-static uint8_t MKV_IsSectorValid(uint8_t idx)
+uint8_t MKV_IsSectorValid(uint8_t idx)
 {
     MKV_SectorHeader_t hdr;
     if (MKV_ReadSectorHeader(idx, &hdr) != 0)
@@ -1132,5 +1134,543 @@ MKV_Error_t mkv_reset_all(void)
     }
 
     log_i("All defaults restored");
+    return MKV_OK;
+}
+
+/* ==================== 内部函数导出（供TLV使用） ==================== */
+
+/**
+ * @brief 获取MicroKV实例
+ * @return MKV_Instance_t* 实例指针
+ * @note TLV使用，用于访问内部状态和Flash操作
+ */
+MKV_Instance_t* mkv_get_instance(void)
+{
+    return &g_mkv;
+}
+
+/* ==================== TLV 实现（兼容模式） ==================== */
+
+/* TLV内部状态 */
+static const TLV_Default_t* g_tlv_defaults      = NULL;
+static uint16_t             g_tlv_default_count = 0;
+
+/**
+ * @brief 在指定扇区中查找TLV类型
+ * @param sector_idx 扇区索引
+ * @param type 目标类型ID
+ * @param out_entry 输出：找到的条目（可为NULL）
+ * @return uint32_t 条目的Flash地址，0表示未找到
+ */
+static uint32_t TLV_FindTypeInSector(uint8_t sector_idx, uint8_t type, MKV_Entry_t* out_entry)
+{
+    uint32_t sector_addr = g_mkv.flash_ops.flash_base + sector_idx * g_mkv.flash_ops.sector_size;
+    uint32_t offset      = MKV_SECTOR_HEADER_SIZE;
+    uint32_t found_addr  = 0;
+
+    while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
+    {
+        uint32_t    entry_addr = sector_addr + offset;
+        MKV_Entry_t entry;
+
+        if (g_mkv.flash_ops.read_func(entry_addr, (uint8_t*) &entry, sizeof(MKV_Entry_t)) != 0)
+        {
+            break;
+        }
+
+        if (entry.state == MKV_STATE_ERASED)
+        {
+            break;
+        }
+
+        // 检查是否为有效的TLV条目（key_len=0标识TLV）
+        if (entry.state == MKV_STATE_VALID && entry.key_len == 0 && entry.val_len > 0)
+        {
+            // 读取类型字节（value的第一个字节）
+            uint8_t entry_type;
+            if (g_mkv.flash_ops.read_func(entry_addr + MKV_ENTRY_HEADER_SIZE, &entry_type, 1) == 0)
+            {
+                if (entry_type == type)
+                {
+                    found_addr = entry_addr;
+                    if (out_entry)
+                    {
+                        *out_entry = entry;
+                    }
+                }
+            }
+        }
+
+        // 计算下一个条目的位置
+        uint32_t entry_size = MKV_ALIGN(MKV_ENTRY_HEADER_SIZE + entry.key_len + entry.val_len + MKV_ENTRY_CRC_SIZE);
+        offset += entry_size;
+    }
+
+    return found_addr;
+}
+
+/**
+ * @brief 在所有扇区中查找TLV类型
+ * @param type 目标类型ID
+ * @param out_entry 输出：找到的条目（可为NULL）
+ * @return uint32_t 条目的Flash地址，0表示未找到
+ */
+static uint32_t TLV_FindType(uint8_t type, MKV_Entry_t* out_entry)
+{
+    // 从活跃扇区开始反向搜索，优先返回最新的值
+    for (uint8_t i = 0; i < g_mkv.flash_ops.sector_count; i++)
+    {
+        uint8_t sector_idx = (g_mkv.active_sector + g_mkv.flash_ops.sector_count - i) % g_mkv.flash_ops.sector_count;
+
+        if (!MKV_IsSectorValid(sector_idx))
+        {
+            continue;
+        }
+
+        uint32_t addr = TLV_FindTypeInSector(sector_idx, type, out_entry);
+        if (addr != 0)
+        {
+            return addr;
+        }
+    }
+
+    return 0;
+}
+
+/* ==================== TLV 公共API ==================== */
+
+MKV_Error_t tlv_set(uint8_t type, const void* value, uint8_t len)
+{
+    if (type == 0 || !value || len == 0)
+    {
+        log_e("Invalid TLV parameters: type=%u, value=%p, len=%u", type, value, len);
+        return MKV_ERR_INVALID;
+    }
+
+    if (len > 254)
+    {  // 1字节给type
+        log_e("TLV value too long: %u", len);
+        return MKV_ERR_INVALID;
+    }
+
+    // 创建TLV数据：[type:1B][value:len]
+    uint8_t tlv_data[256];
+    tlv_data[0] = type;
+    memcpy(tlv_data + 1, value, len);
+
+    // 使用空字符串作为键名，这样key_len=0，标识为TLV条目
+    return mkv_set("", tlv_data, len + 1);
+}
+
+MKV_Error_t tlv_get(uint8_t type, void* buffer, uint8_t buf_size, uint8_t* out_len)
+{
+    if (type == 0 || !buffer || buf_size == 0)
+    {
+        log_e("Invalid TLV parameters");
+        return MKV_ERR_INVALID;
+    }
+
+    MKV_Entry_t entry;
+    uint32_t    addr = TLV_FindType(type, &entry);
+
+    if (addr == 0)
+    {
+        log_d("TLV type %u not found", type);
+        return MKV_ERR_NOT_FOUND;
+    }
+
+    // TLV条目已被删除（val_len<=1表示只有type字节，没有实际数据）
+    if (entry.val_len <= 1)
+    {
+        log_d("TLV type %u deleted", type);
+        return MKV_ERR_NOT_FOUND;
+    }
+
+    // 计算实际值长度（去掉type字节）
+    uint8_t value_len = entry.val_len - 1;
+    uint8_t read_len  = (value_len < buf_size) ? value_len : buf_size;
+
+    // 跳过type字节，直接读取value
+    uint32_t value_addr = addr + MKV_ENTRY_HEADER_SIZE + 1;  // +1跳过type字节
+    if (g_mkv.flash_ops.read_func(value_addr, buffer, read_len) != 0)
+    {
+        log_e("Failed to read TLV value");
+        return MKV_ERR_FLASH;
+    }
+
+    if (out_len)
+    {
+        *out_len = read_len;
+    }
+
+    log_d("TLV get type=%u, len=%u", type, read_len);
+    return MKV_OK;
+}
+
+MKV_Error_t tlv_del(uint8_t type)
+{
+    if (type == 0)
+    {
+        return MKV_ERR_INVALID;
+    }
+
+    // TLV删除：写入只包含type字节的条目（没有实际数据）
+    return mkv_set("", &type, 1);  // 只写type，没有value
+}
+
+uint8_t tlv_exists(uint8_t type)
+{
+    if (type == 0)
+    {
+        return 0;
+    }
+
+    MKV_Entry_t entry;
+    uint32_t    addr = TLV_FindType(type, &entry);
+
+    return (addr != 0 && entry.val_len > 1);  // val_len>1表示有效
+}
+
+/* ==================== TLV 默认值 API ==================== */
+
+void tlv_set_defaults(const TLV_Default_t* defaults, uint16_t count)
+{
+    g_tlv_defaults      = defaults;
+    g_tlv_default_count = count;
+    log_i("Set TLV default table: %u entries", count);
+}
+
+static const TLV_Default_t* TLV_FindDefault(uint8_t type)
+{
+    if (!g_tlv_defaults || g_tlv_default_count == 0)
+    {
+        return NULL;
+    }
+
+    for (uint16_t i = 0; i < g_tlv_default_count; i++)
+    {
+        if (g_tlv_defaults[i].type == type)
+        {
+            return &g_tlv_defaults[i];
+        }
+    }
+
+    return NULL;
+}
+
+MKV_Error_t tlv_get_default(uint8_t type, void* buffer, uint8_t buf_size, uint8_t* out_len)
+{
+    // 先尝试从Flash读取
+    MKV_Error_t result = tlv_get(type, buffer, buf_size, out_len);
+    if (result == MKV_OK)
+    {
+        return MKV_OK;
+    }
+
+    // Flash中没有，查找默认值
+    const TLV_Default_t* def = TLV_FindDefault(type);
+    if (!def)
+    {
+        log_d("No default value for TLV type %u", type);
+        return MKV_ERR_NOT_FOUND;
+    }
+
+    uint8_t copy_len = (def->len < buf_size) ? def->len : buf_size;
+    memcpy(buffer, def->value, copy_len);
+
+    if (out_len)
+    {
+        *out_len = copy_len;
+    }
+
+    log_d("TLV get default type=%u, len=%u", type, copy_len);
+    return MKV_OK;
+}
+
+MKV_Error_t tlv_reset_type(uint8_t type)
+{
+    const TLV_Default_t* def = TLV_FindDefault(type);
+    if (!def)
+    {
+        log_e("No default value for TLV type %u", type);
+        return MKV_ERR_NOT_FOUND;
+    }
+
+    return tlv_set(type, def->value, def->len);
+}
+
+MKV_Error_t tlv_reset_all(void)
+{
+    if (!g_tlv_defaults || g_tlv_default_count == 0)
+    {
+        log_w("No TLV default table set");
+        return MKV_OK;
+    }
+
+    for (uint16_t i = 0; i < g_tlv_default_count; i++)
+    {
+        MKV_Error_t result = tlv_set(g_tlv_defaults[i].type, g_tlv_defaults[i].value, g_tlv_defaults[i].len);
+        if (result != MKV_OK)
+        {
+            log_e("Failed to reset TLV type %u", g_tlv_defaults[i].type);
+            return result;
+        }
+    }
+
+    log_i("Reset %u TLV types to defaults", g_tlv_default_count);
+    return MKV_OK;
+}
+
+/* ==================== TLV 迭代器 API ==================== */
+
+void tlv_iter_init(TLV_Iterator_t* iter)
+{
+    if (!iter)
+    {
+        return;
+    }
+
+    iter->sector_idx    = 0;
+    iter->sector_offset = MKV_SECTOR_HEADER_SIZE;
+    iter->finished      = 0;
+
+    log_d("TLV iterator initialized");
+}
+
+uint8_t tlv_iter_next(TLV_Iterator_t* iter, TLV_EntryInfo_t* entry_info)
+{
+    if (!iter || iter->finished || !entry_info)
+    {
+        return 0;
+    }
+
+    // 扫描所有扇区
+    while (iter->sector_idx < g_mkv.flash_ops.sector_count)
+    {
+        uint32_t sector_addr = g_mkv.flash_ops.flash_base + iter->sector_idx * g_mkv.flash_ops.sector_size;
+
+        // 扫描当前扇区
+        while (iter->sector_offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE)
+        {
+            uint32_t    entry_addr = sector_addr + iter->sector_offset;
+            MKV_Entry_t entry;
+
+            if (g_mkv.flash_ops.read_func(entry_addr, (uint8_t*) &entry, sizeof(MKV_Entry_t)) != 0)
+            {
+                break;
+            }
+
+            if (entry.state == MKV_STATE_ERASED)
+            {
+                break;
+            }
+
+            // 计算下一个条目位置
+            uint32_t entry_size = MKV_ALIGN(MKV_ENTRY_HEADER_SIZE + entry.key_len + entry.val_len + MKV_ENTRY_CRC_SIZE);
+            iter->sector_offset += entry_size;
+
+            // 检查是否为有效的TLV条目
+            if (entry.state == MKV_STATE_VALID && entry.key_len == 0 && entry.val_len > 1)
+            {
+                // 读取类型字节
+                uint8_t type;
+                if (g_mkv.flash_ops.read_func(entry_addr + MKV_ENTRY_HEADER_SIZE, &type, 1) == 0)
+                {
+                    entry_info->type       = type;
+                    entry_info->len        = entry.val_len - 1;                       // 减去type字节
+                    entry_info->flash_addr = entry_addr + MKV_ENTRY_HEADER_SIZE + 1;  // value起始地址
+
+                    log_d("TLV iter found type=%u, len=%u", type, entry_info->len);
+                    return 1;
+                }
+            }
+        }
+
+        // 切换到下一个扇区
+        iter->sector_idx++;
+        iter->sector_offset = MKV_SECTOR_HEADER_SIZE;
+    }
+
+    // 迭代完成
+    iter->finished = 1;
+    log_d("TLV iterator finished");
+    return 0;
+}
+
+MKV_Error_t tlv_iter_read_value(const TLV_EntryInfo_t* entry_info, void* buffer, uint8_t buf_size)
+{
+    if (!entry_info || !buffer || buf_size == 0)
+    {
+        return MKV_ERR_INVALID;
+    }
+
+    uint8_t read_len = (entry_info->len < buf_size) ? entry_info->len : buf_size;
+
+    if (g_mkv.flash_ops.read_func(entry_info->flash_addr, buffer, read_len) != 0)
+    {
+        return MKV_ERR_FLASH;
+    }
+
+    return MKV_OK;
+}
+
+/* ==================== TLV 工具函数 ==================== */
+
+void tlv_get_stats(uint16_t* tlv_count, uint32_t* tlv_used)
+{
+    uint16_t count = 0;
+    uint32_t used  = 0;
+
+    TLV_Iterator_t  iter;
+    TLV_EntryInfo_t entry_info;
+
+    tlv_iter_init(&iter);
+
+    while (tlv_iter_next(&iter, &entry_info))
+    {
+        count++;
+        used += 7 + entry_info.len;  // TLV条目开销：4B头 + 1B类型 + NB值 + 2B CRC
+    }
+
+    if (tlv_count)
+        *tlv_count = count;
+    if (tlv_used)
+        *tlv_used = used;
+
+    log_d("TLV stats: %u entries, %u bytes", count, used);
+}
+
+uint8_t tlv_has_data(void)
+{
+    TLV_Iterator_t  iter;
+    TLV_EntryInfo_t entry_info;
+
+    tlv_iter_init(&iter);
+    return tlv_iter_next(&iter, &entry_info);
+}
+
+/* ==================== TLV 历史记录 API ==================== */
+
+/**
+ * @brief 获取指定类型的所有历史TLV记录
+ * @param type 类型ID
+ * @param history 输出：历史记录数组
+ * @param max_count 最大返回数量
+ * @param actual_count 输出：实际找到的数量
+ * @return MKV_Error_t 错误码
+ * @note 返回的记录按写入时间排序，最新的在前面
+ */
+MKV_Error_t tlv_get_history(uint8_t type, TLV_HistoryEntry_t* history, uint8_t max_count, uint8_t* actual_count)
+{
+    if (type == 0 || !history || max_count == 0)
+    {
+        return MKV_ERR_INVALID;
+    }
+
+    uint8_t            found_count = 0;
+    TLV_HistoryEntry_t temp_history[32];  // 临时存储，最多32条
+    uint8_t            temp_count = 0;
+
+    // 遍历所有扇区查找指定类型的所有记录
+    for (uint8_t s = 0; s < g_mkv.flash_ops.sector_count; s++)
+    {
+        if (!MKV_IsSectorValid(s))
+        {
+            continue;
+        }
+
+        uint32_t sector_addr = g_mkv.flash_ops.flash_base + s * g_mkv.flash_ops.sector_size;
+        uint32_t offset      = MKV_SECTOR_HEADER_SIZE;
+
+        while (offset < g_mkv.flash_ops.sector_size - MKV_ENTRY_HEADER_SIZE && temp_count < 32)
+        {
+            uint32_t    entry_addr = sector_addr + offset;
+            MKV_Entry_t entry;
+
+            if (g_mkv.flash_ops.read_func(entry_addr, (uint8_t*) &entry, sizeof(MKV_Entry_t)) != 0)
+            {
+                break;
+            }
+
+            if (entry.state == MKV_STATE_ERASED)
+            {
+                break;
+            }
+
+            // 检查是否为指定类型的TLV条目
+            if (entry.state == MKV_STATE_VALID && entry.key_len == 0 && entry.val_len > 0)
+            {
+                uint8_t entry_type;
+                if (g_mkv.flash_ops.read_func(entry_addr + MKV_ENTRY_HEADER_SIZE, &entry_type, 1) == 0)
+                {
+                    if (entry_type == type)
+                    {
+                        // 找到匹配的记录
+                        temp_history[temp_count].type        = type;
+                        temp_history[temp_count].len         = entry.val_len - 1;                       // 减去type字节
+                        temp_history[temp_count].flash_addr  = entry_addr + MKV_ENTRY_HEADER_SIZE + 1;  // value起始地址
+                        temp_history[temp_count].write_order = entry_addr;  // 使用地址作为写入顺序
+                        temp_count++;
+                    }
+                }
+            }
+
+            // 计算下一个条目位置
+            uint32_t entry_size = MKV_ALIGN(MKV_ENTRY_HEADER_SIZE + entry.key_len + entry.val_len + MKV_ENTRY_CRC_SIZE);
+            offset += entry_size;
+        }
+    }
+
+    // 按写入顺序排序（最新的在前面）
+    for (uint8_t i = 0; i < temp_count - 1; i++)
+    {
+        for (uint8_t j = i + 1; j < temp_count; j++)
+        {
+            if (temp_history[i].write_order < temp_history[j].write_order)
+            {
+                TLV_HistoryEntry_t temp = temp_history[i];
+                temp_history[i]         = temp_history[j];
+                temp_history[j]         = temp;
+            }
+        }
+    }
+
+    // 复制到输出数组
+    uint8_t copy_count = (temp_count < max_count) ? temp_count : max_count;
+    for (uint8_t i = 0; i < copy_count; i++)
+    {
+        history[i] = temp_history[i];
+    }
+
+    if (actual_count)
+    {
+        *actual_count = copy_count;
+    }
+
+    log_d("Found %u history records for TLV type %u", copy_count, type);
+    return MKV_OK;
+}
+
+/**
+ * @brief 读取历史记录的值
+ * @param history_entry 历史记录条目
+ * @param buffer 输出缓冲区
+ * @param buf_size 缓冲区大小
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_read_history_value(const TLV_HistoryEntry_t* history_entry, void* buffer, uint8_t buf_size)
+{
+    if (!history_entry || !buffer || buf_size == 0)
+    {
+        return MKV_ERR_INVALID;
+    }
+
+    uint8_t read_len = (history_entry->len < buf_size) ? history_entry->len : buf_size;
+
+    if (g_mkv.flash_ops.read_func(history_entry->flash_addr, buffer, read_len) != 0)
+    {
+        return MKV_ERR_FLASH;
+    }
+
     return MKV_OK;
 }

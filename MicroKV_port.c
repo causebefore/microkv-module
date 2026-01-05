@@ -16,7 +16,6 @@
 
 #include "MicroKV.h"
 #include "MicroKV_port.h"
-#include "stm32f10x.h"
 
 #include <mlog.h>
 
@@ -44,11 +43,11 @@
  */
 static int mkv_flash_read_impl(uint32_t addr, uint8_t* buf, uint32_t len)
 {
-    /* STM32内部Flash直接内存映射读取 */
-    for (uint32_t i = 0; i < len; i++)
-    {
-        buf[i] = *(__IO uint8_t*) (addr + i);
-    }
+    //    /* STM32内部Flash直接内存映射读取 */
+    //    for (uint32_t i = 0; i < len; i++)
+    //    {
+    //        buf[i] = *(__IO uint8_t*) (addr + i);
+    //    }
     return 0; /* 成功 */
 }
 
@@ -70,104 +69,104 @@ static int mkv_flash_read_impl(uint32_t addr, uint8_t* buf, uint32_t len)
  */
 static int mkv_flash_write_impl(uint32_t addr, const uint8_t* buf, uint32_t len)
 {
-    /* 检查地址范围 */
-    if (addr < MKV_FLASH_BASE || addr + len > MKV_FLASH_SIZE + MKV_FLASH_BASE)
-    {
-        log_e("Write addr out of range: 0x%08X, len=%u", addr, len);
-        return -1;
-    }
+    //    /* 检查地址范围 */
+    //    if (addr < MKV_FLASH_BASE || addr + len > MKV_FLASH_SIZE + MKV_FLASH_BASE)
+    //    {
+    //        log_e("Write addr out of range: 0x%08X, len=%u", addr, len);
+    //        return -1;
+    //    }
 
-    if (!buf || len == 0)
-    {
-        log_e("Write invalid param: buf=%p, len=%u", buf, len);
-        return -1;
-    }
+    //    if (!buf || len == 0)
+    //    {
+    //        log_e("Write invalid param: buf=%p, len=%u", buf, len);
+    //        return -1;
+    //    }
 
-    /* 清除Flash错误标志 */
-    FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
+    //    /* 清除Flash错误标志 */
+    //    FLASH_ClearFlag(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPRTERR);
 
-    FLASH_Unlock();
+    //    FLASH_Unlock();
 
-    FLASH_Status   flash_status = FLASH_COMPLETE;
-    uint32_t       write_addr   = addr;
-    uint32_t       remaining    = len;
-    const uint8_t* src_ptr      = buf;
+    //    FLASH_Status   flash_status = FLASH_COMPLETE;
+    //    uint32_t       write_addr   = addr;
+    //    uint32_t       remaining    = len;
+    //    const uint8_t* src_ptr      = buf;
 
-    /* 处理未对齐的起始地址 */
-    if (write_addr & 0x01)
-    {
-        /* 地址未对齐到半字边界，需要特殊处理 */
-        FLASH_Lock();
-        log_e("Write addr not half-word aligned: 0x%08X", write_addr);
-        return -1;
-    }
+    //    /* 处理未对齐的起始地址 */
+    //    if (write_addr & 0x01)
+    //    {
+    //        /* 地址未对齐到半字边界，需要特殊处理 */
+    //        FLASH_Lock();
+    //        log_e("Write addr not half-word aligned: 0x%08X", write_addr);
+    //        return -1;
+    //    }
 
-    /* 按半字(16位)写入 */
-    while (remaining >= 2)
-    {
-        uint16_t half_word     = src_ptr[0] | (src_ptr[1] << 8);
-        uint16_t current_value = *(volatile uint16_t*) write_addr;
+    //    /* 按半字(16位)写入 */
+    //    while (remaining >= 2)
+    //    {
+    //        uint16_t half_word     = src_ptr[0] | (src_ptr[1] << 8);
+    //        uint16_t current_value = *(volatile uint16_t*) write_addr;
 
-        /* Flash特性：只能将bit从1变为0，不能从0变为1 */
-        /* 检查是否需要擦除 */
-        if (current_value != 0xFFFF && (current_value & half_word) != half_word)
-        {
-            log_e("Flash not erased at 0x%08X (cur=0x%04X, new=0x%04X)", write_addr, current_value, half_word);
-            log_e("Please call MicroFS_Format() first to erase the Flash area!");
-            log_e("Or use MicroFS_Port_EraseAll() to force erase all blocks.");
-            FLASH_Lock();
-            return -1;
-        }
+    //        /* Flash特性：只能将bit从1变为0，不能从0变为1 */
+    //        /* 检查是否需要擦除 */
+    //        if (current_value != 0xFFFF && (current_value & half_word) != half_word)
+    //        {
+    //            log_e("Flash not erased at 0x%08X (cur=0x%04X, new=0x%04X)", write_addr, current_value, half_word);
+    //            log_e("Please call MicroFS_Format() first to erase the Flash area!");
+    //            log_e("Or use MicroFS_Port_EraseAll() to force erase all blocks.");
+    //            FLASH_Lock();
+    //            return -1;
+    //        }
 
-        /* 如果已经是目标值，跳过写入 */
-        if (current_value == half_word)
-        {
-            write_addr += 2;
-            src_ptr += 2;
-            remaining -= 2;
-            continue;
-        }
+    //        /* 如果已经是目标值，跳过写入 */
+    //        if (current_value == half_word)
+    //        {
+    //            write_addr += 2;
+    //            src_ptr += 2;
+    //            remaining -= 2;
+    //            continue;
+    //        }
 
-        flash_status = FLASH_ProgramHalfWord(write_addr, half_word);
+    //        flash_status = FLASH_ProgramHalfWord(write_addr, half_word);
 
-        if (flash_status != FLASH_COMPLETE)
-        {
-            log_e("Flash write failed at 0x%08X, status=%d", write_addr, flash_status);
-            FLASH_Lock();
-            return -1;
-        }
+    //        if (flash_status != FLASH_COMPLETE)
+    //        {
+    //            log_e("Flash write failed at 0x%08X, status=%d", write_addr, flash_status);
+    //            FLASH_Lock();
+    //            return -1;
+    //        }
 
-        /* 验证写入 */
-        if (*(volatile uint16_t*) write_addr != half_word)
-        {
-            log_e("Flash write verify failed at 0x%08X", write_addr);
-            FLASH_Lock();
-            return -1;
-        }
+    //        /* 验证写入 */
+    //        if (*(volatile uint16_t*) write_addr != half_word)
+    //        {
+    //            log_e("Flash write verify failed at 0x%08X", write_addr);
+    //            FLASH_Lock();
+    //            return -1;
+    //        }
 
-        write_addr += 2;
-        src_ptr += 2;
-        remaining -= 2;
-    }
-    /* 处理剩余的单字节 */
-    if (remaining == 1)
-    {
-        /* 读取当前半字，修改低字节后写回 */
-        uint16_t half_word = 0xFFFF;
-        if (write_addr < MKV_FLASH_BASE + MKV_FLASH_SIZE)
-        {
-            half_word    = (0xFF00) | src_ptr[0];
-            flash_status = FLASH_ProgramHalfWord(write_addr, half_word);
+    //        write_addr += 2;
+    //        src_ptr += 2;
+    //        remaining -= 2;
+    //    }
+    //    /* 处理剩余的单字节 */
+    //    if (remaining == 1)
+    //    {
+    //        /* 读取当前半字，修改低字节后写回 */
+    //        uint16_t half_word = 0xFFFF;
+    //        if (write_addr < MKV_FLASH_BASE + MKV_FLASH_SIZE)
+    //        {
+    //            half_word    = (0xFF00) | src_ptr[0];
+    //            flash_status = FLASH_ProgramHalfWord(write_addr, half_word);
 
-            if (flash_status != FLASH_COMPLETE)
-            {
-                log_e("Flash write failed at 0x%08X, status=%d", write_addr, flash_status);
-                FLASH_Lock();
-                return -1;
-            }
-        }
-    }
-    FLASH_Lock();
+    //            if (flash_status != FLASH_COMPLETE)
+    //            {
+    //                log_e("Flash write failed at 0x%08X, status=%d", write_addr, flash_status);
+    //                FLASH_Lock();
+    //                return -1;
+    //            }
+    //        }
+    //    }
+    //    FLASH_Lock();
     return 0;
 }
 
@@ -185,22 +184,22 @@ static int mkv_flash_write_impl(uint32_t addr, const uint8_t* buf, uint32_t len)
  */
 static int mkv_flash_erase_impl(uint32_t addr)
 {
-    FLASH_Status status;
-    uint32_t     pages = MKV_SECTOR_SIZE / STM32_FLASH_PAGE_SIZE;
+    //    FLASH_Status status;
+    //    uint32_t     pages = MKV_SECTOR_SIZE / STM32_FLASH_PAGE_SIZE;
 
-    FLASH_Unlock();
+    //    FLASH_Unlock();
 
-    for (uint32_t i = 0; i < pages; i++)
-    {
-        status = FLASH_ErasePage(addr + i * STM32_FLASH_PAGE_SIZE);
-        if (status != FLASH_COMPLETE)
-        {
-            FLASH_Lock();
-            return -1;
-        }
-    }
+    //    for (uint32_t i = 0; i < pages; i++)
+    //    {
+    //        status = FLASH_ErasePage(addr + i * STM32_FLASH_PAGE_SIZE);
+    //        if (status != FLASH_COMPLETE)
+    //        {
+    //            FLASH_Lock();
+    //            return -1;
+    //        }
+    //    }
 
-    FLASH_Lock();
+    //    FLASH_Lock();
     return 0;
 }
 

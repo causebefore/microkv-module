@@ -1,0 +1,655 @@
+# =============================================================================
+# clang-format 配置文件 - 针对嵌入式C语言项目优化
+# 版本要求: clang-format 21
+# =============================================================================
+# 配置理念:
+#   1. 大括号单独成行 (Allman风格) - 提高代码块可视化
+#   2. 最大化对齐 - 提升代码整洁度和可读性
+#   3. 适当换行 - 避免过长代码行
+#   4. 保持嵌入式代码风格习惯
+# =============================================================================
+
+---
+# =============================================================================
+#                              基础语言配置
+# =============================================================================
+
+# 目标语言: C/C++
+# Cpp格式规则同样适用于C语言
+Language: Cpp
+
+# C++标准版本
+# 可选: c++03, c++11, c++14, c++17, c++20, Latest, Auto
+Standard: c++11
+
+# 基础风格模板
+# 可选: LLVM, Google, Chromium, Mozilla, WebKit, Microsoft, GNU
+# LLVM风格较为中性，适合作为基础进行自定义
+BasedOnStyle: LLVM
+
+# =============================================================================
+#                              行宽与缩进
+# =============================================================================
+
+# 每行最大字符数
+# 120适合现代宽屏显示器，同时便于代码审查
+# 嵌入式项目常用80或120
+ColumnLimit: 120
+
+# 基础缩进宽度 (空格数)
+IndentWidth: 4
+
+# Tab宽度 (用于显示已有Tab字符)
+TabWidth: 4
+
+# 使用空格代替Tab
+# Never: 始终使用空格 (推荐，保证跨平台一致性)
+# Always: 始终使用Tab
+# ForIndentation: 仅缩进用Tab
+UseTab: Never
+
+# 续行缩进宽度
+# 当一行代码过长需要换行时，后续行的额外缩进
+ContinuationIndentWidth: 4
+
+# C++访问修饰符(public/private/protected)的缩进偏移
+# -4表示与class关键字对齐 (C语言不适用，但保留配置)
+AccessModifierOffset: -4
+
+# =============================================================================
+#                              对齐配置 (提升可读性的关键)
+# =============================================================================
+
+# 开括号后的对齐方式
+# Align: 参数与开括号后对齐
+# DontAlign: 不对齐
+# AlwaysBreak: 开括号后总是换行
+# BlockIndent: 块缩进风格 (clang-format 14+)
+# 示例 (Align):
+#   function(arg1,
+#            arg2,
+#            arg3);
+AlignAfterOpenBracket: Align
+
+# 对齐连续的赋值语句
+# 示例:
+#   int a            = 1;
+#   int somelongname = 2;
+#   double c         = 3;
+AlignConsecutiveAssignments: true
+
+# 对齐连续的位域声明
+# 示例:
+#   struct {
+#       int test : 4;
+#       int b    : 5;
+#       int c    : 8;
+#   };
+AlignConsecutiveBitFields: true
+
+# 对齐连续的变量声明
+# 示例:
+#   int         aaaa = 12;
+#   float       b    = 23;
+#   const char* str  = "hello";
+AlignConsecutiveDeclarations: true
+
+# 对齐连续的宏定义
+# 示例:
+#   #define SHORT        1
+#   #define LONGER_NAME  2
+#   #define EVEN_LONGER  3
+AlignConsecutiveMacros: true
+
+# 反斜杠换行符对齐位置
+# Left: 左对齐
+# Right: 右对齐到ColumnLimit
+# 示例 (Right):
+#   #define MACRO(a, b) \
+#       do {            \
+#           func(a);    \
+#       } while (0)
+AlignEscapedNewlines: Right
+
+# 对齐二元和三元表达式的操作数
+# 示例:
+#   int result = longVariable1
+#              + longVariable2
+#              - longVariable3;
+AlignOperands: true
+
+# 对齐行尾注释
+# 示例:
+#   int a = 1;   /* 变量a */
+#   int bbb = 2; /* 变量b */
+AlignTrailingComments: true
+
+# 结构体数组初始化对齐 (clang-format 13+)
+# 示例:
+#   struct Data arr[] = {
+#       {1,   2,   "hello"},
+#       {100, 200, "world"},
+#   };
+AlignArrayOfStructures: Left
+
+# =============================================================================
+#                              大括号样式 (Allman风格 - 大括号单独成行)
+# =============================================================================
+
+# 大括号断行风格
+# Custom: 使用BraceWrapping自定义
+# Allman: 所有大括号都单独成行 (嵌入式常用)
+# Linux: 函数大括号换行，控制语句不换行
+# Attach: 大括号不换行 (K&R风格)
+BreakBeforeBraces: Custom
+
+# 自定义大括号换行规则 (配合BreakBeforeBraces: Custom使用)
+BraceWrapping:
+  # 类定义后的大括号换行
+  AfterClass: true
+
+  # 控制语句(if/for/while/switch等)后的大括号换行
+  # true: if (condition)
+  #       {
+  # false: if (condition) {
+  AfterControlStatement: true
+
+  # 枚举定义后的大括号换行
+  AfterEnum: true
+
+  # 函数定义后的大括号换行
+  AfterFunction: true
+
+  # 命名空间后的大括号换行 (C语言不适用)
+  AfterNamespace: true
+
+  # 结构体定义后的大括号换行
+  AfterStruct: true
+
+  # 联合体定义后的大括号换行
+  AfterUnion: true
+
+  # extern "C"后的大括号换行
+  AfterExternBlock: true
+
+  # catch之前换行
+  # true:  }
+  #        catch {
+  # false: } catch {
+  BeforeCatch: true
+
+  # else之前换行
+  # true:  }
+  #        else {
+  # false: } else {
+  BeforeElse: true
+
+  # while之前换行 (do-while语句)
+  BeforeWhile: true
+
+  # 大括号本身是否缩进 (一般为false)
+  IndentBraces: false
+
+  # 空函数体是否拆分到多行
+  # true:  void f()
+  #        {
+  #        }
+  # false: void f() {}
+  SplitEmptyFunction: true
+
+  # 空结构体/类是否拆分到多行
+  SplitEmptyRecord: true
+
+  # 空命名空间是否拆分到多行
+  SplitEmptyNamespace: true
+
+# =============================================================================
+#                              断行控制
+# =============================================================================
+
+# 函数调用参数是否允许全部放到下一行
+# false: func(arg1,
+#             arg2);
+# true:  func(
+#            arg1, arg2);
+AllowAllArgumentsOnNextLine: false
+
+# 函数声明参数是否允许全部放到下一行
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# 构造函数初始化列表是否允许全部放到下一行 (C++特性)
+AllowAllConstructorInitializersOnNextLine: false
+
+# 短代码块是否允许放在单行
+# Never: 不允许
+# Empty: 仅空代码块可以
+# Always: 允许
+AllowShortBlocksOnASingleLine: Never
+
+# 短枚举是否允许放在单行
+# false: enum Color {
+#            RED,
+#            GREEN
+#        };
+# true:  enum Color { RED, GREEN };
+AllowShortEnumsOnASingleLine: false
+
+# 短函数是否允许放在单行
+# None: 不允许
+# InlineOnly: 仅内联函数
+# Empty: 仅空函数
+# Inline: 内联和空函数
+# All: 所有短函数
+AllowShortFunctionsOnASingleLine: None
+
+# 短if语句是否允许放在单行
+# Never: 不允许
+# WithoutElse: 没有else时允许
+# OnlyFirstIf: 仅第一个if允许
+# AllIfsAndElse: 全部允许
+AllowShortIfStatementsOnASingleLine: Never
+
+# 短Lambda是否允许放在单行 (C++特性)
+AllowShortLambdasOnASingleLine: None
+
+# 短case标签是否允许放在单行
+# false: case 1:
+#            x = 1;
+#            break;
+# true:  case 1: x = 1; break;
+AllowShortCaseLabelsOnASingleLine: false
+
+# 短循环是否允许放在单行
+AllowShortLoopsOnASingleLine: false
+
+# 多行字符串前是否总是换行
+AlwaysBreakBeforeMultilineStrings: true
+
+# 函数定义返回类型后的换行方式 (已弃用，但v12仍支持)
+# None: 不换行
+# All: 总是换行
+# TopLevel: 仅顶层函数换行
+AlwaysBreakAfterDefinitionReturnType: None
+
+# 二元运算符断行位置
+# None: 运算符后断行
+# NonAssignment: 非赋值运算符前断行
+# All: 所有运算符前断行
+# 示例 (All):
+#   result = longVar1
+#          + longVar2;
+BreakBeforeBinaryOperators: None
+
+# 三元运算符断行位置
+# true: 在?和:之前断行
+# false: 在?和:之后断行
+BreakBeforeTernaryOperators: true
+
+# =============================================================================
+#                              缩进控制
+# =============================================================================
+
+# case标签缩进
+# true:  switch (x) {
+#            case 1:
+#                break;
+#        }
+# false: switch (x) {
+#        case 1:
+#            break;
+#        }
+IndentCaseLabels: true
+
+# case代码块的额外缩进
+# false: case 1:
+#            {
+#                break;
+#            }
+# true:  case 1:
+#        {
+#            break;
+#        }
+IndentCaseBlocks: false
+
+# goto标签缩进
+# false: goto标签顶格
+# true: goto标签缩进
+IndentGotoLabels: false
+
+# 预处理指令缩进方式
+# None: 不缩进，全部顶格
+# AfterHash: #后缩进
+# BeforeHash: #前缩进
+# 示例 (BeforeHash):
+#   #ifdef DEBUG
+#       #define LOG printf
+#   #endif
+IndentPPDirectives: BeforeHash
+
+# extern "C"块内容缩进 (C++特性)
+# true:  extern "C" {
+#            void func();
+#        }
+# false: extern "C" {
+#        void func();
+#        }
+IndentExternBlock: true
+
+# 函数返回类型换行后，函数名是否缩进
+# 当AlwaysBreakAfterReturnType启用时有效
+IndentWrappedFunctionNames: true
+
+# =============================================================================
+#                              空格控制
+# =============================================================================
+
+# C风格类型转换后添加空格
+# true:  (int) x
+# false: (int)x
+SpaceAfterCStyleCast: true
+
+# 逻辑非运算符后添加空格
+# true:  ! condition
+# false: !condition
+SpaceAfterLogicalNot: false
+
+# template关键字后添加空格 (C++特性)
+SpaceAfterTemplateKeyword: true
+
+# 赋值运算符前添加空格
+# true:  a = b
+# false: a= b
+SpaceBeforeAssignmentOperators: true
+
+# 圆括号前添加空格的规则
+# Never: 从不
+# ControlStatements: 仅控制语句 (if/for/while/switch)
+# ControlStatementsExceptControlMacros: 控制语句但排除宏
+# NonEmptyParentheses: 非空括号前
+# Always: 总是
+SpaceBeforeParens: ControlStatements
+
+# 方括号前添加空格
+# true:  arr [i]
+# false: arr[i]
+SpaceBeforeSquareBrackets: false
+
+# 空圆括号中添加空格
+# true:  func( )
+# false: func()
+SpaceInEmptyParentheses: false
+
+# C风格类型转换括号中添加空格
+# true:  ( int )x
+# false: (int)x
+SpacesInCStyleCastParentheses: false
+
+# 容器字面量中添加空格 (C++11)
+# true:  { 1, 2, 3 }
+# false: {1, 2, 3}
+SpacesInContainerLiterals: false
+
+# 圆括号内添加空格
+# true:  func( a, b )
+# false: func(a, b)
+SpacesInParentheses: false
+
+# 方括号内添加空格
+# true:  arr[ i ]
+# false: arr[i]
+SpacesInSquareBrackets: false
+
+# 尾随注释前的最小空格数
+SpacesBeforeTrailingComments: 2
+
+# 角括号内添加空格 (模板参数)
+# true:  template< typename T >
+# false: template<typename T>
+SpacesInAngles: false
+
+# ----- clang-format 13+ 特性 (已注释) -----
+# 指定空格插入位置 (更精细的控制)
+# SpaceBeforeParensOptions:
+#   AfterControlStatements: true
+#   AfterFunctionDefinitionName: false
+
+# =============================================================================
+#                              空行控制
+# =============================================================================
+
+# 代码块开始处保留空行
+# false: 删除代码块开始的空行
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# 最多保留的连续空行数
+MaxEmptyLinesToKeep: 2
+
+# 分隔定义的空行数 (clang-format 14+)
+# Leave: 保持原样
+# Always: 总是在函数/类/结构体定义之间添加空行
+# Never: 从不分隔
+SeparateDefinitionBlocks: Always
+
+# =============================================================================
+#                              指针和引用对齐
+# =============================================================================
+
+# 指针对齐方式
+# Left: int* ptr (指针符号靠近类型)
+# Right: int *ptr (指针符号靠近变量名)
+# Middle: int * ptr (两边都有空格)
+PointerAlignment: Left
+
+# 引用对齐方式 (C++特性)
+# Left: int& ref
+# Right: int &ref
+# Middle: int & ref
+# Pointer: 与指针对齐方式相同
+ReferenceAlignment: Pointer
+
+# 是否从代码中推导指针对齐方式
+# false: 使用PointerAlignment指定的方式
+# true: 自动推导 (不推荐)
+DerivePointerAlignment: false
+
+# =============================================================================
+#                              头文件和包含排序
+# =============================================================================
+
+# 是否排序#include语句
+# true: 自动排序
+# false: 保持原顺序
+# CaseSensitive: 大小写敏感排序 (clang-format 12+)
+# CaseInsensitive: 大小写不敏感排序 (clang-format 12+)
+SortIncludes: true
+
+# 头文件包含的分类优先级
+# 数字越小优先级越高，相同优先级按字母排序
+# 排序顺序: 主头文件 → STM32库 → BSP文件 → 其他项目文件 → C标准库 → 第三方
+IncludeBlocks: Regroup
+IncludeCategories:
+  # 1. STM32库头文件 (stm32xxxx.h, misc.h 等)
+  - Regex: '^"(stm32|misc).*\.h"$'
+    Priority: 2
+  # 2. BSP驱动头文件 (bsp_xxx.h)
+  - Regex: '^"bsp_.*\.h"$'
+    Priority: 3
+  # 3. 项目内其他头文件 (双引号包含)
+  - Regex: '^".*\.h"$'
+    Priority: 4
+  # 4. 标准C库头文件
+  - Regex: '^<(assert|complex|ctype|errno|fenv|float|inttypes|iso646|limits|locale|math|setjmp|signal|stdalign|stdarg|stdatomic|stdbool|stddef|stdint|stdio|stdlib|stdnoreturn|string|tgmath|threads|time|uchar|wchar|wctype)\.h>$'
+    Priority: 5
+  # 5. 系统/第三方头文件
+  - Regex: "^<.*>$"
+    Priority: 6
+  # 6. 其他
+  - Regex: ".*"
+    Priority: 7
+
+# 主头文件正则 (与源文件同名的头文件会被放在最前面)
+IncludeIsMainRegex: "(_test)?$"
+
+# 是否排序using声明 (C++特性)
+SortUsingDeclarations: true
+
+# =============================================================================
+#                              注释格式化
+# =============================================================================
+
+# 是否重新格式化注释使其符合ColumnLimit
+# true: 长注释会被换行
+ReflowComments: true
+
+# 修复命名空间闭合注释 (C++特性)
+# true: } // namespace xxx
+FixNamespaceComments: true
+
+# =============================================================================
+#                              宏和预处理器
+# =============================================================================
+
+# 宏代码块的缩进
+# 用于识别宏定义的代码块结构
+# MacroBlockBegin和MacroBlockEnd用于识别自定义的代码块宏
+# 例如: BEGIN_SECTION ... END_SECTION
+
+# 属性宏列表
+# 这些宏会被当作属性处理，不会影响缩进
+AttributeMacros:
+  - __capability
+  - __attribute__
+  - __packed
+  - __aligned
+
+# 类型名宏列表
+# 这些宏定义的名称会被当作类型处理
+TypenameMacros:
+  - STACK_OF
+  - LIST_ENTRY
+
+# foreach宏列表
+# 这些宏会被当作foreach循环处理
+ForEachMacros:
+  - foreach
+  - FOREACH
+  - BOOST_FOREACH
+  - list_for_each
+  - list_for_each_entry
+  - list_for_each_safe
+
+# if宏列表 (控制语句宏)
+IfMacros:
+  - IF
+  - LIKELY
+  - UNLIKELY
+
+# 语句宏列表
+StatementMacros:
+  - Q_UNUSED
+  - UNUSED
+
+# =============================================================================
+#                              其他格式设置
+# =============================================================================
+
+# C++11风格的花括号列表
+# true: {1, 2, 3} 不在花括号内添加空格
+Cpp11BracedListStyle: true
+
+# 紧凑命名空间 (C++特性)
+# true: namespace A { namespace B {
+# false: namespace A {
+#        namespace B {
+CompactNamespaces: false
+
+# 构造函数初始化列表断行风格 (C++特性)
+# BeforeColon: 冒号前断行
+# BeforeComma: 逗号前断行
+# AfterColon: 冒号后断行
+BreakConstructorInitializers: BeforeColon
+
+# 单行注释前缀空格数
+# 控制 // 后面的空格
+# 示例设置1个空格: // comment
+CommentPragmas: "^ IWYU pragma:"
+
+# 禁用格式化的注释模式
+# 匹配此模式的注释会阻止格式化
+# 默认匹配: // clang-format off ... // clang-format on
+
+# 实验性: 自动检测函数调用和定义的换行方式
+ExperimentalAutoDetectBinPacking: false
+# 数组每个元素单独一行
+BinPackArguments: false
+# 函数参数允许多参数同一行
+BinPackParameters: true
+# =============================================================================
+#                         clang-format 13+ 特性
+# =============================================================================
+
+# 移除多余的分号
+RemoveSemicolon: false
+
+# 移除大括号 (单语句时) - 不推荐嵌入式使用
+RemoveBracesLLVM: false
+
+# 限定符对齐 (const等)
+# Leave: 保持原样
+# Left: const int
+# Right: int const
+# Custom: 自定义顺序
+QualifierAlignment: Leave
+
+# 插入尾随逗号 (C++11)
+InsertTrailingCommas: None
+
+# =============================================================================
+#                         clang-format 14+ 特性
+# =============================================================================
+
+# Lambda表达式主体缩进
+LambdaBodyIndentation: Signature
+
+# =============================================================================
+#                         clang-format 15+ 特性
+# =============================================================================
+
+# 文件末尾插入换行
+InsertNewlineAtEOF: true
+
+# 行分隔符
+# LF: Unix风格
+# CRLF: Windows风格
+# DeriveLF/DeriveCRLF: 自动检测
+LineEnding: LF
+
+# =============================================================================
+#                         clang-format 16+ 特性
+# =============================================================================
+
+# 对齐连续的短case语句
+AlignConsecutiveShortCaseStatements:
+  Enabled: false
+  AcrossEmptyLines: false
+  AcrossComments: false
+
+# 跳过宏定义体的格式化
+SkipMacroDefinitionBody: false
+
+# =============================================================================
+#                         clang-format 17+ 特性
+# =============================================================================
+
+# 属性后断行
+# Leave: 保持原样
+# Always: 总是断行
+# Never: 从不断行
+BreakAfterAttributes: Leave
+# =============================================================================
+#                         clang-format 18+ 特性
+# =============================================================================
+
+# 保持以下特性为默认值，根据需要启用
+# BreakAdjacentStringLiterals: true
+

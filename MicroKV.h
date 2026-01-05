@@ -281,6 +281,21 @@ MKV_Error_t mkv_internal_init(const MKV_FlashOps_t* ops);
  */
 MKV_Error_t mkv_scan(void);
 
+/**
+ * @brief 获取MicroKV实例（供TLV使用）
+ * @return MKV_Instance_t* 实例指针
+ * @note 内部函数，TLV模块使用
+ */
+MKV_Instance_t* mkv_get_instance(void);
+
+/**
+ * @brief 检查扇区是否有效（供TLV使用）
+ * @param idx 扇区索引
+ * @return uint8_t 1=有效，0=无效
+ * @note 内部函数，TLV模块使用
+ */
+uint8_t MKV_IsSectorValid(uint8_t idx);
+
 /* ==================== 基础 API ==================== */
 
 /**
@@ -491,5 +506,234 @@ const MKV_Default_t* mkv_find_default(const char* key);
  * @endcode
  */
 #define MKV_DEF_DATA(k, v, l) {.key = (k), .value = (v), .len = (l)}
+
+/* ==================== TLV 扩展支持 ==================== */
+
+/**
+ * @brief TLV 类型 ID 枚举
+ * @note 用户可根据需要扩展，支持 1-255 种类型（0为保留）
+ */
+typedef enum
+{
+    TLV_TYPE_RESERVED = 0x00,  // 保留
+
+    /* 通用数据类型 (0x01-0x0F) */
+    TLV_TYPE_U8     = 0x01,  // 8位无符号整数
+    TLV_TYPE_U16    = 0x02,  // 16位无符号整数
+    TLV_TYPE_U32    = 0x03,  // 32位无符号整数
+    TLV_TYPE_I8     = 0x04,  // 8位有符号整数
+    TLV_TYPE_I16    = 0x05,  // 16位有符号整数
+    TLV_TYPE_I32    = 0x06,  // 32位有符号整数
+    TLV_TYPE_FLOAT  = 0x07,  // 32位浮点数
+    TLV_TYPE_DOUBLE = 0x08,  // 64位双精度浮点数
+    TLV_TYPE_BOOL   = 0x09,  // 布尔值（1字节）
+    TLV_TYPE_STRING = 0x0A,  // 字符串（以\0结尾）
+    TLV_TYPE_BLOB   = 0x0B,  // 二进制数据块
+
+    /* 电机参数类型 (0x10-0x1F) */
+    TLV_TYPE_MOTOR_KP      = 0x10,  // 电机Kp参数
+    TLV_TYPE_MOTOR_KI      = 0x11,  // 电机Ki参数
+    TLV_TYPE_MOTOR_KD      = 0x12,  // 电机Kd参数
+    TLV_TYPE_MOTOR_SPEED   = 0x13,  // 电机最大转速
+    TLV_TYPE_MOTOR_CURRENT = 0x14,  // 电机最大电流
+
+    /* 通信参数类型 (0x20-0x2F) */
+    TLV_TYPE_UART_BAUD = 0x20,  // 串口波特率
+    TLV_TYPE_DEVICE_ID = 0x21,  // 设备ID
+    TLV_TYPE_NODE_ADDR = 0x22,  // 节点地址
+
+    /* 系统参数类型 (0x30-0x3F) */
+    TLV_TYPE_SYS_TIMEOUT = 0x30,  // 系统超时
+    TLV_TYPE_WATCHDOG    = 0x31,  // 看门狗周期
+    TLV_TYPE_SLEEP_MODE  = 0x32,  // 休眠模式
+
+    /* 日志类型 (0x40-0x4F) */
+    TLV_TYPE_LOG = 0x40,  // 日志
+
+    /* 用户自定义类型 (0x80-0xFF) */
+    TLV_TYPE_USER_BASE = 0x80,  // 用户类型起始
+
+} TLV_Type_t;
+
+/**
+ * @brief TLV默认值条目
+ * @note 用于定义类型的默认值表
+ */
+typedef struct
+{
+    uint8_t     type;   // TLV类型ID
+    const void* value;  // 默认值指针
+    uint8_t     len;    // 值长度
+} TLV_Default_t;
+
+/**
+ * @brief TLV迭代器结构
+ * @note 用于遍历所有TLV条目
+ */
+typedef struct
+{
+    uint8_t  sector_idx;     // 当前扫描的扇区索引
+    uint32_t sector_offset;  // 当前扇区内偏移
+    uint8_t  finished;       // 迭代完成标志
+} TLV_Iterator_t;
+
+/**
+ * @brief TLV条目信息
+ * @note 迭代器返回的条目信息
+ */
+typedef struct
+{
+    uint8_t  type;        // 类型ID
+    uint8_t  len;         // 值长度
+    uint32_t flash_addr;  // Flash地址（用于读取值）
+} TLV_EntryInfo_t;
+
+/* ==================== TLV API 声明 ==================== */
+
+/**
+ * @brief 设置TLV条目
+ * @param type 类型ID (1-255)
+ * @param value 值指针
+ * @param len 值长度 (1-255)
+ * @return MKV_Error_t 错误码
+ * @note 实现与KV条目兼容共存，key_len=0标识TLV条目
+ */
+MKV_Error_t tlv_set(uint8_t type, const void* value, uint8_t len);
+
+/**
+ * @brief 获取TLV条目
+ * @param type 类型ID
+ * @param buffer 输出缓冲区
+ * @param buf_size 缓冲区大小
+ * @param out_len 输出：实际长度（可为NULL）
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_get(uint8_t type, void* buffer, uint8_t buf_size, uint8_t* out_len);
+
+/**
+ * @brief 删除TLV条目
+ * @param type 类型ID
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_del(uint8_t type);
+
+/**
+ * @brief 检查TLV类型是否存在
+ * @param type 类型ID
+ * @return uint8_t 1=存在，0=不存在
+ */
+uint8_t tlv_exists(uint8_t type);
+
+/**
+ * @brief 设置TLV默认值表
+ * @param defaults 默认值表（必须是静态/全局数组）
+ * @param count 默认值条目数量
+ */
+void tlv_set_defaults(const TLV_Default_t* defaults, uint16_t count);
+
+/**
+ * @brief 获取TLV值（支持默认值回退）
+ * @param type 类型ID
+ * @param buffer 输出缓冲区
+ * @param buf_size 缓冲区大小
+ * @param out_len 输出：实际长度
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_get_default(uint8_t type, void* buffer, uint8_t buf_size, uint8_t* out_len);
+
+/**
+ * @brief 重置类型为默认值
+ * @param type 类型ID
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_reset_type(uint8_t type);
+
+/**
+ * @brief 重置所有类型为默认值
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_reset_all(void);
+
+/**
+ * @brief 初始化TLV迭代器
+ * @param iter 迭代器指针
+ */
+void tlv_iter_init(TLV_Iterator_t* iter);
+
+/**
+ * @brief 迭代下一个TLV条目
+ * @param iter 迭代器指针
+ * @param entry_info 输出：条目信息
+ * @return uint8_t 1=找到条目，0=迭代完成
+ */
+uint8_t tlv_iter_next(TLV_Iterator_t* iter, TLV_EntryInfo_t* entry_info);
+
+/**
+ * @brief 读取迭代器当前条目的值
+ * @param entry_info 条目信息
+ * @param buffer 输出缓冲区
+ * @param buf_size 缓冲区大小
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_iter_read_value(const TLV_EntryInfo_t* entry_info, void* buffer, uint8_t buf_size);
+
+/**
+ * @brief 获取TLV存储统计信息
+ * @param tlv_count 输出：TLV条目数量
+ * @param tlv_used 输出：TLV占用字节数
+ */
+void tlv_get_stats(uint16_t* tlv_count, uint32_t* tlv_used);
+
+/**
+ * @brief 检查Flash中是否包含TLV数据
+ * @return uint8_t 1=包含TLV数据，0=仅包含KV数据
+ */
+uint8_t tlv_has_data(void);
+
+/**
+ * @brief TLV历史记录条目
+ */
+typedef struct
+{
+    uint8_t  type;         // 类型ID
+    uint8_t  len;          // 值长度
+    uint32_t flash_addr;   // Flash地址
+    uint32_t write_order;  // 写入顺序（地址越大越新）
+} TLV_HistoryEntry_t;
+
+/**
+ * @brief 获取指定类型的历史TLV记录
+ * @param type 类型ID
+ * @param history 输出：历史记录数组
+ * @param max_count 最大返回数量
+ * @param actual_count 输出：实际找到的数量
+ * @return MKV_Error_t 错误码
+ * @note 返回的记录按写入时间排序，最新的在前面
+ */
+MKV_Error_t tlv_get_history(uint8_t type, TLV_HistoryEntry_t* history, uint8_t max_count, uint8_t* actual_count);
+
+/**
+ * @brief 读取历史记录的值
+ * @param history_entry 历史记录条目
+ * @param buffer 输出缓冲区
+ * @param buf_size 缓冲区大小
+ * @return MKV_Error_t 错误码
+ */
+MKV_Error_t tlv_read_history_value(const TLV_HistoryEntry_t* history_entry, void* buffer, uint8_t buf_size);
+
+/* ==================== TLV 辅助宏 ==================== */
+
+/**
+ * @brief 定义TLV类型的默认值
+ */
+#define TLV_DEF_U8(type_id, default_val)          {.type = type_id, .value = &(uint8_t) {default_val}, .len = 1}
+#define TLV_DEF_U16(type_id, default_val)         {.type = type_id, .value = &(uint16_t) {default_val}, .len = 2}
+#define TLV_DEF_U32(type_id, default_val)         {.type = type_id, .value = &(uint32_t) {default_val}, .len = 4}
+#define TLV_DEF_DATA(type_id, data_ptr, data_len) {.type = type_id, .value = data_ptr, .len = data_len}
+
+/**
+ * @brief TLV默认值表大小计算
+ */
+#define TLV_DEFAULT_TABLE_SIZE(table) (sizeof(table) / sizeof((table)[0]))
 
 #endif /* __MICROKV_H */
