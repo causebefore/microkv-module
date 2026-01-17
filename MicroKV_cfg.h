@@ -26,22 +26,6 @@
  *  @note 受限于uint8_t类型，最大255字节 */
 #define MKV_MAX_VALUE_LEN 255
 
-/* ==================== Flash配置 ==================== */
-
-/** @brief Flash起始地址
- *  @note STM32F103ZE: 0x08050000（APP区后预留的存储区） */
-#define MKV_FLASH_BASE 0x08050000
-
-/** @brief 扇区大小（字节）
- *  @note 建议与Flash最小擦除单元一致，STM32F103ZE为2KB，此处设为4KB */
-#define MKV_SECTOR_SIZE (4 * 1024)
-
-/** @brief 扇区数量
- *  @note 最少2个扇区（用于双缓冲），建议4-8个扇区 */
-#define MKV_SECTOR_COUNT 8
-
-/** @brief Flash总大小（自动计算） */
-#define MKV_FLASH_SIZE (MKV_SECTOR_SIZE * MKV_SECTOR_COUNT)
 
 /* ==================== 缓存配置 ==================== */
 

@@ -16,6 +16,24 @@
 extern "C"
 {
 #endif
+/* ==================== Flash配置 ==================== */
+
+/** @brief Flash起始地址
+ *  @note 通过FAL分区管理，此地址为kv分区起始地址
+ *  @note STM32F407: 0x08080000 (分区偏移0x80000) */
+#define MKV_FLASH_BASE 0x08080000
+
+/** @brief 扩区大小（字节）
+ *  @note STM32F407扩区8-11为128KB，MicroKV需要与Flash扩区大小匹配 */
+#define MKV_SECTOR_SIZE (128 * 1024)
+
+/** @brief 扩区数量
+ *  @note FAL kv分区共512KB = 4个128KB扩区 */
+#define MKV_SECTOR_COUNT 4
+
+/** @brief Flash总大小（自动计算） */
+#define MKV_FLASH_SIZE (MKV_SECTOR_SIZE * MKV_SECTOR_COUNT)
+
 
     /* ===========================================================================
      *                          接口函数声明
