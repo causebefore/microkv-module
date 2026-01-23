@@ -9,6 +9,14 @@
 - [NanoKV_port.c](file://NanoKV_port.c)
 </cite>
 
+## 更新摘要
+**变更内容**
+- 完全替换MicroKV实现为NanoKV全新实现
+- 新增完整的TLV存储API支持
+- 实现历史记录管理与保留策略机制
+- 添加迭代器API和工具函数
+- 更新架构图和使用示例
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -24,6 +32,8 @@
 ## 简介
 本文件为NanoKV的TLV存储API参考文档，聚焦nkv_tlv_set、nkv_tlv_get、nkv_tlv_del、nkv_tlv_exists等TLV操作接口，覆盖TLV类型系统、默认值支持、历史记录管理、迭代器API、保留策略机制，并解释TLV条目结构、类型范围定义与适用场景。同时提供工具函数nkv_tlv_stats、nkv_tlv_has_data的使用说明与最佳实践。
 
+**更新** 本版本完全基于NanoKV实现，替代原有的MicroKV实现，提供更完善的TLV存储解决方案。
+
 ## 项目结构
 NanoKV采用单片机/嵌入式KV/TLV存储方案，核心由头文件定义API与数据结构，实现文件提供KV/TLV具体逻辑，配置文件控制行为开关，移植层封装Flash读写擦除接口。
 
@@ -37,17 +47,17 @@ E --> F["NanoKV_port.c<br/>移植层实现(Flash)"]
 F --> G["物理Flash设备"]
 ```
 
-图表来源
-- [NanoKV.h](file://NanoKV.h#L1-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**图表来源**
+- [NanoKV.h](file://NanoKV.h#L1-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.h](file://NanoKV_port.h#L1-L27)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L1-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L1-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.h](file://NanoKV_port.h#L1-L27)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
@@ -65,7 +75,7 @@ F --> G["物理Flash设备"]
   - nkv_tlv_reset_type与nkv_tlv_reset_all重置为默认
 - 历史记录与保留策略
   - nkv_tlv_get_history按写入顺序返回历史版本
-  - nkv_tlv_set_retention设置“保留最近N个版本”
+  - nkv_tlv_set_retention设置"保留最近N个版本"
   - 仅在启用保留策略时生效
 - 迭代器API
   - nkv_tlv_iter_init初始化
@@ -75,12 +85,12 @@ F --> G["物理Flash设备"]
   - nkv_tlv_stats统计TLV数量与占用
   - nkv_tlv_has_data判断是否存在TLV数据
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L176-L257)
-- [NanoKV.c](file://NanoKV.c#L940-L1261)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L190-L266)
+- [NanoKV.c](file://NanoKV.c#L1202-L1501)
 
 ## 架构总览
-NanoKV以KV为基础，TLV通过“无键条目”复用KV写入路径，实现类型-长度-值的多版本存储与历史管理。写入时先写入状态标记为“写入中”，再写入完整数据，最后原子性地写入有效状态，确保掉电安全。GC阶段会根据保留策略决定是否迁移旧版本。
+NanoKV以KV为基础，TLV通过"无键条目"复用KV写入路径，实现类型-长度-值的多版本存储与历史管理。写入时先写入状态标记为"写入中"，再写入完整数据，最后原子性地写入有效状态，确保掉电安全。GC阶段会根据保留策略决定是否迁移旧版本。
 
 ```mermaid
 sequenceDiagram
@@ -97,9 +107,9 @@ KV-->>TLV : "返回成功"
 TLV-->>App : "返回成功"
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L964-L973)
-- [NanoKV.c](file://NanoKV.c#L695-L763)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L1202-L1211)
+- [NanoKV.c](file://NanoKV.c#L843-L932)
 
 ## 详细组件分析
 
@@ -113,13 +123,12 @@ TLV-->>App : "返回成功"
   - 应用：0x01..0x7F
   - 系统：0x80..0xFF
 - 保留策略
-  - 通过“保留最近N个版本”控制GC迁移，避免过早删除新值
+  - 通过"保留最近N个版本"控制GC迁移，避免过早删除新值
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L52-L58)
-- [NanoKV.h](file://NanoKV.h#L178-L183)
-- [NanoKV.h](file://NanoKV.h#L186-L191)
-- [NanoKV.c](file://NanoKV.c#L940-L973)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L190-L196)
+- [NanoKV.h](file://NanoKV.h#L214-L229)
+- [NanoKV.c](file://NanoKV.c#L1202-L1211)
 
 ### TLV操作接口
 - nkv_tlv_set
@@ -132,7 +141,7 @@ TLV-->>App : "返回成功"
   - 返回：未找到或条目无效返回错误码
 - nkv_tlv_del
   - 功能：删除指定类型的TLV
-  - 行为：写入一个仅包含type的“删除占位”条目
+  - 行为：写入一个仅包含type的"删除占位"条目
 - nkv_tlv_exists
   - 功能：检查指定类型是否存在有效值
   - 行为：查找并验证条目有效性
@@ -149,11 +158,11 @@ SetOK -- 否 --> ErrFlash["返回Flash错误"]
 SetOK -- 是 --> Done(["返回成功"])
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L964-L973)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L1202-L1211)
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L964-L1010)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1202-L1248)
 
 ### 默认值支持
 - nkv_tlv_set_defaults
@@ -163,8 +172,8 @@ SetOK -- 是 --> Done(["返回成功"])
 - nkv_tlv_reset_type / nkv_tlv_reset_all
   - 将指定类型或全部类型重置为默认值
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L1013-L1064)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1251-L1304)
 
 ### 历史记录与保留策略
 - 历史记录
@@ -187,12 +196,12 @@ UpdateCount --> Done(["完成"])
 AddNew --> Done
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L1223-L1245)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L1464-L1486)
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L1165-L1219)
-- [NanoKV.c](file://NanoKV.c#L1222-L1259)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1406-L1460)
+- [NanoKV.c](file://NanoKV.c#L1464-L1501)
 
 ### 迭代器API
 - nkv_tlv_iter_init
@@ -220,11 +229,11 @@ end
 end
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L1067-L1132)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L1307-L1373)
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L1067-L1132)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1307-L1373)
 
 ### 工具函数
 - nkv_tlv_stats
@@ -232,16 +241,16 @@ end
 - nkv_tlv_has_data
   - 快速判断是否存在TLV数据
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L1135-L1162)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1376-L1403)
 
 ### 与KV存储的区别
 - KV存储：键值对，支持默认值回退与缓存
 - TLV存储：类型-长度-值，支持历史记录与保留策略，适用于配置项、日志、参数集等场景
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L133-L175)
-- [NanoKV.h](file://NanoKV.h#L176-L257)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L145-L181)
+- [NanoKV.h](file://NanoKV.h#L188-L266)
 
 ## 依赖关系分析
 - 头文件依赖
@@ -263,23 +272,23 @@ PORTC --> C
 C --> H
 ```
 
-图表来源
-- [NanoKV.h](file://NanoKV.h#L19-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**图表来源**
+- [NanoKV.h](file://NanoKV.h#L19-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.h](file://NanoKV_port.h#L1-L27)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L1-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L1-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.h](file://NanoKV_port.h#L1-L27)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
 ## 性能考量
 - 追加写入与状态机
-  - 写入采用“写入中→有效”的状态机，结合CRC，保证掉电安全
+  - 写入采用"写入中→有效"的状态机，结合CRC，保证掉电安全
 - 增量GC
   - 分步迁移有效条目，避免长时间阻塞，适合实时系统
 - 缓存
@@ -287,10 +296,10 @@ C --> H
 - 迭代成本
   - 迭代器需遍历所有扇区与条目，复杂度O(S*N)，建议配合保留策略限制历史数量
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L34-L41)
-- [NanoKV.c](file://NanoKV.c#L489-L624)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L14-L26)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L34-L43)
+- [NanoKV.c](file://NanoKV.c#L498-L590)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L18-L25)
 
 ## 故障排查指南
 - 常见错误码
@@ -299,6 +308,7 @@ C --> H
   - NKV_ERR_NO_SPACE：空间不足
   - NKV_ERR_INVALID：参数无效
   - NKV_ERR_FLASH：Flash操作失败
+  - NKV_ERR_CRC：CRC校验失败
 - 常见问题定位
   - nkv_tlv_set返回参数无效：检查type是否为0、value是否为空、len是否在允许范围内
   - nkv_tlv_get返回未找到：确认类型是否存在有效值，或是否被删除
@@ -309,13 +319,15 @@ C --> H
   - 使用nkv_tlv_has_data快速判断是否存在数据
   - 使用nkv_tlv_iter_next遍历验证条目状态
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L34-L41)
-- [NanoKV.c](file://NanoKV.c#L1135-L1162)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L27-L48)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L45-L53)
+- [NanoKV.c](file://NanoKV.c#L1376-L1403)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L35-L70)
 
 ## 结论
-NanoKV的TLV存储API以KV实现为基础，通过“无键条目+类型首字节”实现类型-长度-值的灵活存储，并提供默认值回退、历史记录与保留策略、迭代器与统计工具，适用于嵌入式配置管理、参数集版本控制、日志记录等场景。合理配置保留策略与缓存，可在可靠性与性能之间取得平衡。
+NanoKV的TLV存储API以KV实现为基础，通过"无键条目+类型首字节"实现类型-长度-值的灵活存储，并提供默认值回退、历史记录与保留策略、迭代器与统计工具，适用于嵌入式配置管理、参数集版本控制、日志记录等场景。合理配置保留策略与缓存，可在可靠性与性能之间取得平衡。
+
+**更新** 本版本基于全新的NanoKV实现，提供了比MicroKV更完善的TLV存储解决方案，包括完整的API集合、历史记录管理、保留策略机制等高级特性。
 
 ## 附录
 
@@ -347,6 +359,6 @@ NanoKV的TLV存储API以KV实现为基础，通过“无键条目+类型首字�
   - nkv_tlv_stats：统计数量与占用
   - nkv_tlv_has_data：是否存在TLV数据
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L218-L247)
-- [NanoKV.c](file://NanoKV.c#L964-L1261)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L230-L266)
+- [NanoKV.c](file://NanoKV.c#L1202-L1501)

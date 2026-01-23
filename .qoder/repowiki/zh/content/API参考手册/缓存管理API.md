@@ -9,6 +9,14 @@
 - [NanoKV_port.c](file://NanoKV_port.c)
 </cite>
 
+## 更新摘要
+**所做更改**
+- 完全重写以反映从MicroKV到NanoKV的完全替换
+- 更新缓存实现细节，包括LFU算法的具体实现
+- 添加新的配置参数和缓存统计功能
+- 更新缓存清理和状态查询的实现
+- 修正缓存API的使用方法和最佳实践
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -22,7 +30,7 @@
 10. [附录](#附录)
 
 ## 简介
-本文件面向NanoKV的缓存管理API，重点覆盖nkv_cache_stats与nkv_cache_clear两个缓存控制接口，系统阐述LFU（最少频繁使用）缓存的工作原理、缓存条目结构与访问计数机制，解释缓存命中率统计、缓存容量配置与替换策略，并给出缓存性能监控、缓存清理与缓存状态查询的使用方法与实践建议。同时，结合KV与TLV两种存储模式，说明缓存在不同场景下的作用与优化效果，并提供实际使用示例与调试技巧。
+本文档详细介绍NanoKV的缓存管理API，重点覆盖nkv_cache_stats与nkv_cache_clear两个缓存控制接口。NanoKV是一个全新的轻量级嵌入式KV/TLV存储库，采用改进的LFU（最少频繁使用）缓存算法，提供缓存统计、缓存清理和缓存状态查询功能。文档系统阐述LFU缓存的工作原理、缓存条目结构与访问计数机制，解释缓存命中率统计、缓存容量配置与替换策略，并给出缓存性能监控、缓存清理与缓存状态查询的使用方法与实践建议。
 
 ## 项目结构
 NanoKV采用单文件头+实现的组织方式，配合配置头文件进行编译期开关与参数定制。缓存相关能力通过条件编译开关启用，核心API位于公共头文件中，实现位于源文件内。
@@ -36,16 +44,16 @@ E --> A
 E --> B
 ```
 
-图表来源
-- [NanoKV.h](file://NanoKV.h#L16-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**图表来源**
+- [NanoKV.h](file://NanoKV.h#L16-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.h](file://NanoKV_port.h#L1-L27)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L16-L257)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L16-L269)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
 ## 核心组件
@@ -57,10 +65,10 @@ E --> B
   - nkv_cache_stats：填充传入的统计结构，计算命中率。
   - nkv_cache_clear：清空缓存容器，重置计数与条目有效性。
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L85-L110)
-- [NanoKV.h](file://NanoKV.h#L164-L168)
-- [NanoKV.c](file://NanoKV.c#L847-L862)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L97-L122)
+- [NanoKV.h](file://NanoKV.h#L176-L180)
+- [NanoKV.c](file://NanoKV.c#L125-L208)
 
 ## 架构总览
 缓存作为KV读路径的加速层，与主存储（Flash）协同工作。当启用缓存时，读取流程优先检查缓存命中；若未命中，则从Flash读取并更新缓存。写入与删除操作会同步更新或移除缓存中的对应条目，确保一致性。
@@ -88,9 +96,9 @@ API-->>U : "返回成功"
 end
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L765-L798)
-- [NanoKV.c](file://NanoKV.c#L89-L169)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L934-L991)
+- [NanoKV.c](file://NanoKV.c#L127-L143)
 
 ## 详细组件分析
 
@@ -118,12 +126,12 @@ L --> U["更新或插入条目<br/>设置有效位"]
 U --> R2["返回读取值"]
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L89-L169)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L127-L143)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L85-L110)
-- [NanoKV.c](file://NanoKV.c#L89-L169)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L97-L122)
+- [NanoKV.c](file://NanoKV.c#L127-L143)
 
 ### 缓存统计与清理API
 - nkv_cache_stats
@@ -147,13 +155,12 @@ S->>O : "计算并写入hit_rate"
 S-->>U : "返回"
 ```
 
-图表来源
-- [NanoKV.c](file://NanoKV.c#L847-L856)
+**图表来源**
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L97-L110)
-- [NanoKV.h](file://NanoKV.h#L164-L168)
-- [NanoKV.c](file://NanoKV.c#L847-L862)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L176-L180)
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
 
 ### KV与TLV中的缓存作用差异
 - KV缓存
@@ -163,9 +170,9 @@ S-->>U : "返回"
   - TLV以类型-长度-值形式存储，通常用于历史记录与保留策略场景。
   - 当前实现中，TLV读取路径不直接复用KV缓存，但其读取流程与KV一致，均可受益于LFU策略带来的整体性能提升。
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L765-L798)
-- [NanoKV.c](file://NanoKV.c#L964-L994)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L934-L991)
+- [NanoKV.c](file://NanoKV.c#L1202-L1232)
 
 ### 缓存配置参数与影响分析
 - 开关与容量
@@ -178,9 +185,9 @@ S-->>U : "返回"
   - 根据热点键分布与可用RAM设定容量，优先满足关键路径的热点数据。
   - 结合nkv_cache_stats监控命中率，动态调整容量或引入更复杂的策略。
 
-章节来源
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L14-L17)
-- [NanoKV.h](file://NanoKV.h#L85-L110)
+**章节来源**
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L17-L20)
+- [NanoKV.h](file://NanoKV.h#L97-L122)
 
 ### 使用示例与最佳实践
 - 查询缓存状态
@@ -193,10 +200,10 @@ S-->>U : "返回"
   - 在高频读取场景下，先尝试缓存命中；未命中再从Flash读取并更新缓存。
   - 写入/删除KV/TLV后，缓存会相应更新或移除，确保一致性。
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L847-L862)
-- [NanoKV.c](file://NanoKV.c#L765-L798)
-- [NanoKV.c](file://NanoKV.c#L964-L994)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
+- [NanoKV.c](file://NanoKV.c#L934-L991)
+- [NanoKV.c](file://NanoKV.c#L1202-L1232)
 
 ## 依赖关系分析
 - 头文件依赖
@@ -215,15 +222,15 @@ H --> C["NanoKV.c<br/>实现与API"]
 PORT["NanoKV_port.c<br/>Flash操作实现"] --> C
 ```
 
-图表来源
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
-- [NanoKV.h](file://NanoKV.h#L16-L257)
-- [NanoKV.c](file://NanoKV.c#L1-L1261)
+**图表来源**
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
+- [NanoKV.h](file://NanoKV.h#L16-L269)
+- [NanoKV.c](file://NanoKV.c#L1-L1502)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L16-L257)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L51)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L16-L269)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L1-L92)
 - [NanoKV_port.c](file://NanoKV_port.c#L1-L95)
 
 ## 性能考量
@@ -238,10 +245,10 @@ PORT["NanoKV_port.c<br/>Flash操作实现"] --> C
 - 增量GC与缓存
   - 增量GC在写入过程中分摊GC开销，减少长时间阻塞；缓存不会参与GC，但整体读性能提升有助于减少未命中。
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L847-L862)
-- [NanoKV.c](file://NanoKV.c#L765-L798)
-- [NanoKV_cfg.h](file://NanoKV_cfg.h#L18-L21)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
+- [NanoKV.c](file://NanoKV.c#L934-L991)
+- [NanoKV_cfg.h](file://NanoKV_cfg.h#L17-L20)
 
 ## 故障排查指南
 - 缓存统计异常
@@ -257,10 +264,10 @@ PORT["NanoKV_port.c<br/>Flash操作实现"] --> C
   - 现象：写入新值后读取旧值。
   - 排查：确认写入/删除路径是否调用了缓存更新/移除逻辑；检查NKV_CACHE_ENABLE是否开启。
 
-章节来源
-- [NanoKV.c](file://NanoKV.c#L847-L862)
-- [NanoKV.c](file://NanoKV.c#L765-L798)
-- [NanoKV.c](file://NanoKV.c#L800-L806)
+**章节来源**
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
+- [NanoKV.c](file://NanoKV.c#L934-L991)
+- [NanoKV.c](file://NanoKV.c#L993-L999)
 
 ## 结论
 NanoKV的LFU缓存为KV/TLV读取提供了有效的加速机制。通过nkv_cache_stats与nkv_cache_clear，开发者可以监控与控制缓存行为，结合配置参数与运行时统计，实现性能与资源的平衡。在实际应用中，建议根据热点数据特征与系统资源，合理设置缓存容量，并持续监控命中率以指导优化。
@@ -274,8 +281,7 @@ NanoKV的LFU缓存为KV/TLV读取提供了有效的加速机制。通过nkv_cach
   - 缓存统计与清理实现：见源文件。
   - KV读取路径与缓存交互：见源文件。
 
-章节来源
-- [NanoKV.h](file://NanoKV.h#L97-L110)
-- [NanoKV.h](file://NanoKV.h#L164-L168)
-- [NanoKV.c](file://NanoKV.c#L847-L862)
-- [NanoKV.c](file://NanoKV.c#L765-L798)
+**章节来源**
+- [NanoKV.h](file://NanoKV.h#L176-L180)
+- [NanoKV.c](file://NanoKV.c#L1040-L1055)
+- [NanoKV.c](file://NanoKV.c#L934-L991)
