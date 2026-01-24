@@ -37,7 +37,7 @@
 #define NKV_STATE_VALID     0xFFFC /* 有效状态   (1111 1111 1111 1100) */
 #define NKV_STATE_PRE_DEL   0xFFF8 /* 预删除状态 (1111 1111 1111 1000) */
 #define NKV_STATE_DELETED   0x0000 /* 已删除状态 (0000 0000 0000 0000) */
-#define NKV_HEADER_SIZE     4      /* 条目头大小 */
+#define NKV_HEADER_SIZE     6      /* 条目头大小 (state + key_len + val_len + key_hash + reserved) */
 #define NKV_CRC_SIZE        2      /* CRC校验大小 */
 #define NKV_SECTOR_HDR_SIZE 4      /* 扇区头大小 */
 
@@ -64,9 +64,11 @@ typedef struct
 /* KV条目头 */
 typedef struct
 {
-    uint16_t state;   /* 状态 */
-    uint8_t  key_len; /* 键长度 */
-    uint8_t  val_len; /* 值长度 */
+    uint16_t state;    /* 状态 */
+    uint8_t  key_len;  /* 键长度 */
+    uint8_t  val_len;  /* 值长度 */
+    uint8_t  key_hash; /* 键哈希（加速查找） */
+    uint8_t  reserved; /* 保留字段（对齐） */
 } NKV_PACKED nkv_entry_t;
 
 /* 默认值条目 */

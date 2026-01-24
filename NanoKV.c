@@ -212,6 +212,7 @@ typedef struct
 {
     const char* key;
     uint8_t     key_len;
+    uint8_t     key_hash; /* 预计算的哈希值 */
 } kv_match_ctx_t;
 
 typedef struct
@@ -219,7 +220,7 @@ typedef struct
     uint8_t type;
 } tlv_match_ctx_t;
 
-/* KV键匹配器 */
+/* KV键匹配器（哈希加速） */
 static uint8_t kv_matcher(const nkv_entry_t* entry, uint32_t addr, void* ctx)
 {
     /* 仅匹配 VALID 或 PRE_DEL 状态 (PRE_DEL 在掉电恢复期间被视为有效) */
@@ -229,6 +230,11 @@ static uint8_t kv_matcher(const nkv_entry_t* entry, uint32_t addr, void* ctx)
     if (entry->key_len != c->key_len)
         return 0;
 
+    /* 哈希快速过滤：哈希不匹配则直接跳过 */
+    if (entry->key_hash != c->key_hash)
+        return 0;
+
+    /* 哈希匹配，需要精确比较键 */
     char tmp[NKV_MAX_KEY_LEN];
     g_nkv.flash.read(addr + NKV_HEADER_SIZE, (uint8_t*) tmp, c->key_len);
     return (memcmp(tmp, c->key, c->key_len) == 0);
@@ -359,7 +365,8 @@ static uint32_t find_in_sector(uint8_t idx, uint8_t (*matcher)(const nkv_entry_t
 /* 在扇区中查找键 */
 static uint32_t find_key_in_sector(uint8_t idx, const char* key, nkv_entry_t* out)
 {
-    kv_match_ctx_t ctx = {.key = key, .key_len = strlen(key)};
+    uint8_t        key_len = strlen(key);
+    kv_match_ctx_t ctx     = {.key = key, .key_len = key_len, .key_hash = hash_key(key, key_len)};
     return find_in_sector(idx, kv_matcher, &ctx, out);
 }
 
@@ -830,13 +837,19 @@ nkv_err_t nkv_format(void)
     return NKV_OK;
 }
 
-/* 更新条目状态 */
+/* 更新条目状态（保留 key_len 和 val_len） */
 static nkv_err_t update_entry_state(uint32_t addr, uint16_t state)
 {
     static uint8_t buf[32];
-    memset(buf, 0xFF, sizeof(buf));
+
+    /* 先读取原有数据，保留 key_len 和 val_len */
+    if (g_nkv.flash.read(addr, buf, g_nkv.flash.align) != 0)
+        return NKV_ERR_FLASH;
+
+    /* 只更新 state 字段 */
     uint16_t* s = (uint16_t*) buf;
     *s          = state;
+
     return (g_nkv.flash.write(addr, buf, g_nkv.flash.align) == 0) ? NKV_OK : NKV_ERR_FLASH;
 }
 
@@ -892,9 +905,11 @@ nkv_err_t nkv_set(const char* key, const void* value, uint8_t len)
     nkv_entry_t*   entry = (nkv_entry_t*) buf;
 
     memset(buf, 0xFF, entry_size);
-    entry->state   = NKV_STATE_WRITING;
-    entry->key_len = key_len;
-    entry->val_len = len;
+    entry->state    = NKV_STATE_WRITING;
+    entry->key_len  = key_len;
+    entry->val_len  = len;
+    entry->key_hash = hash_key(key, key_len); /* 存储键哈希 */
+    entry->reserved = 0xFF;
 
     memcpy(buf + NKV_HEADER_SIZE, key, key_len);
     memcpy(buf + NKV_HEADER_SIZE + key_len, value, len);
@@ -1199,15 +1214,94 @@ static uint32_t find_tlv(uint8_t type, nkv_entry_t* out)
     return 0;
 }
 
+/**
+ * @brief 内部函数：追加写入条目（不查找旧条目）
+ * @param key 键名
+ * @param value 值
+ * @param len 值长度
+ * @return 错误码
+ */
+static nkv_err_t nkv_append_entry(const char* key, const void* value, uint8_t len)
+{
+    if (!g_nkv.initialized || !key || len > NKV_MAX_VALUE_LEN)
+        return NKV_ERR_INVALID;
+    if (len > 0 && !value)
+        return NKV_ERR_INVALID;
+
+    uint8_t key_len = strlen(key);
+    if (key_len >= NKV_MAX_KEY_LEN)
+        return NKV_ERR_INVALID;
+
+    uint32_t entry_size = ALIGN(NKV_HEADER_SIZE + key_len + len + NKV_CRC_SIZE);
+    NKV_ASSERT(entry_size <= g_nkv.flash.sector_size - ALIGNED_HDR_SIZE && "entry_size exceeds sector capacity");
+
+    if (g_nkv.write_offset + entry_size > g_nkv.flash.sector_size)
+    {
+        int8_t free_idx = find_free_sector();
+        if (free_idx >= 0)
+        {
+            nkv_err_t err = switch_to_sector((uint8_t) free_idx);
+            if (err != NKV_OK)
+                return err;
+        }
+        else
+        {
+            nkv_err_t err = do_compact();
+            if (err != NKV_OK)
+                return err;
+        }
+        if (g_nkv.write_offset + entry_size > g_nkv.flash.sector_size)
+            return NKV_ERR_NO_SPACE;
+    }
+
+    static uint8_t buf[MAX_ENTRY_SIZE];
+    nkv_entry_t*   entry = (nkv_entry_t*) buf;
+
+    memset(buf, 0xFF, entry_size);
+    entry->state    = NKV_STATE_WRITING;
+    entry->key_len  = key_len;
+    entry->val_len  = len;
+    entry->key_hash = hash_key(key, key_len); /* 存储键哈希 */
+    entry->reserved = 0xFF;
+
+    memcpy(buf + NKV_HEADER_SIZE, key, key_len);
+    memcpy(buf + NKV_HEADER_SIZE + key_len, value, len);
+
+    uint16_t crc = calc_crc16(buf + NKV_HEADER_SIZE, key_len + len);
+    memcpy(buf + NKV_HEADER_SIZE + key_len + len, &crc, 2);
+
+    uint32_t new_addr = SECTOR_ADDR(g_nkv.active_sector) + g_nkv.write_offset;
+    if (g_nkv.flash.write(new_addr, buf, entry_size) != 0)
+        return NKV_ERR_FLASH;
+
+    update_entry_state(new_addr, NKV_STATE_VALID);
+    g_nkv.write_offset += entry_size;
+
+#if NKV_INCREMENTAL_GC
+    do_incremental_gc();
+#endif
+
+    return NKV_OK;
+}
+
 nkv_err_t nkv_tlv_set(uint8_t type, const void* value, uint8_t len)
 {
     if (type == 0 || !value || len == 0 || len > 254)
         return NKV_ERR_INVALID;
 
+    /* 先查找并删除相同类型的旧 TLV */
+    nkv_entry_t old_entry;
+    uint32_t    old_addr = find_tlv(type, &old_entry);
+    if (old_addr != 0 && old_entry.val_len > 1)
+    {
+        update_entry_state(old_addr, NKV_STATE_DELETED);
+    }
+
+    /* 追加写入新 TLV */
     uint8_t data[256];
     data[0] = type;
     memcpy(data + 1, value, len);
-    return nkv_set("", data, len + 1);
+    return nkv_append_entry("", data, len + 1);
 }
 
 nkv_err_t nkv_tlv_get(uint8_t type, void* buf, uint8_t size, uint8_t* out_len)
@@ -1235,7 +1329,16 @@ nkv_err_t nkv_tlv_del(uint8_t type)
 {
     if (type == 0)
         return NKV_ERR_INVALID;
-    return nkv_set("", &type, 1);
+
+    /* 查找并删除相同类型的 TLV */
+    nkv_entry_t old_entry;
+    uint32_t    old_addr = find_tlv(type, &old_entry);
+    if (old_addr != 0 && old_entry.val_len > 1)
+    {
+        update_entry_state(old_addr, NKV_STATE_DELETED);
+        return NKV_OK;
+    }
+    return NKV_ERR_NOT_FOUND;
 }
 
 uint8_t nkv_tlv_exists(uint8_t type)
